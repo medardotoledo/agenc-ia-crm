@@ -101,3 +101,42 @@ export async function POST(request: Request) {
     return authErrorResponse(e);
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const { agencyAccountId, svc } = await requireAgencyOwner(request);
+    const body = await request.json();
+    const accountId = String(body?.accountId ?? '');
+    const modules: string[] = Array.isArray(body?.modules) ? body.modules : [];
+
+    if (!accountId) {
+      return Response.json({ error: 'accountId es obligatorio' }, { status: 400 });
+    }
+
+    // Verificar que la subcuenta pertenezca a la agencia
+    const { data: acc } = await svc
+      .from('accounts')
+      .select('id')
+      .eq('id', accountId)
+      .eq('parent_account_id', agencyAccountId)
+      .single();
+
+    if (!acc) {
+      return Response.json({ error: 'Subcuenta no encontrada o no pertenece a tu agencia' }, { status: 403 });
+    }
+
+    // Eliminar módulos anteriores e insertar los nuevos activos
+    await svc.from('account_modules').delete().eq('account_id', accountId);
+
+    if (modules.length > 0) {
+      await svc
+        .from('account_modules')
+        .insert(modules.map((m) => ({ account_id: accountId, module_key: m, enabled: true })));
+    }
+
+    return Response.json({ success: true, modules });
+  } catch (e) {
+    return authErrorResponse(e);
+  }
+}
+

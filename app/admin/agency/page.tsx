@@ -197,6 +197,29 @@ export default function AgencyPage() {
   // Permisos disponibles para el formulario de usuario: de los módulos activos de la subcuenta.
   const activeModuleManifests = ALL_MODULES.filter((m) => selected?.modules.includes(m.key));
 
+  async function toggleSubModule(sub: SubAccount, moduleKey: string) {
+    const current = sub.modules || [];
+    const next = current.includes(moduleKey)
+      ? current.filter((m) => m !== moduleKey)
+      : [...current, moduleKey];
+
+    // Optimistic update
+    setSubs((prev) =>
+      prev.map((s) => (s.id === sub.id ? { ...s, modules: next } : s))
+    );
+
+    const r = await authedFetch('/api/agency/sub-accounts', {
+      method: 'PATCH',
+      body: JSON.stringify({ accountId: sub.id, modules: next }),
+    });
+    if (!r.ok) {
+      setMsg({ t: 'err', x: 'Error al actualizar módulos de la subcuenta' });
+      loadSubs();
+    } else {
+      setMsg({ t: 'ok', x: `Módulos de ${sub.name} actualizados` });
+    }
+  }
+
   return (
     <div className="space-y-8 max-w-4xl">
       <div>
@@ -239,22 +262,61 @@ export default function AgencyPage() {
         </button>
       </form>
 
-      {/* Lista de subcuentas */}
-      <div className="space-y-2">
+      {/* Lista de subcuentas con interruptores de módulos */}
+      <div className="space-y-3">
         <h2 className="font-semibold text-ink">Subcuentas ({subs.length})</h2>
         {subs.length === 0 && <p className="text-sm text-ink-soft">Aún no hay subcuentas.</p>}
         {subs.map((s) => (
-          <div key={s.id} className={`flex items-center justify-between rounded-lg border p-3 transition ${selected?.id === s.id ? 'border-primary bg-primary/5' : 'border-line hover:border-line-hover'}`}>
-            <div>
-              <div className="font-medium text-ink">{s.name}</div>
-              <div className="text-xs text-ink-soft">{s.subdomain} · módulos: {s.modules.join(', ') || '—'}</div>
+          <div
+            key={s.id}
+            className={`flex flex-col gap-3 rounded-xl border p-4 transition sm:flex-row sm:items-center sm:justify-between ${
+              selected?.id === s.id ? 'border-primary bg-primary/5 shadow-sm' : 'border-line bg-app hover:border-line-hover'
+            }`}
+          >
+            <div className="space-y-1.5">
+              <div className="font-semibold text-ink text-base">{s.name}</div>
+              <div className="text-xs text-ink-soft">{s.subdomain}</div>
+              
+              {/* Switches de Módulos Activos por Subcuenta */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-soft">Módulos:</span>
+                {ALL_MODULES.map((m) => {
+                  const isActive = (s.modules || []).includes(m.key);
+                  return (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => toggleSubModule(s, m.key)}
+                      className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium border transition ${
+                        isActive
+                          ? 'border-primary/40 bg-primary/10 text-primary font-semibold'
+                          : 'border-line bg-soft text-ink-soft hover:border-line-hover'
+                      }`}
+                    >
+                      <span>{isActive ? '✓' : '○'}</span>
+                      {m.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <button onClick={() => openSub(s)} className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${selected?.id === s.id ? 'border-primary bg-primary text-inverse' : 'border-line text-ink hover:bg-soft'}`}>
-              {selected?.id === s.id ? 'Seleccionada' : 'Ver Usuarios'}
-            </button>
+
+            <div className="flex items-center gap-2 pt-2 sm:pt-0">
+              <button
+                onClick={() => openSub(s)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                  selected?.id === s.id
+                    ? 'border-primary bg-primary text-inverse'
+                    : 'border-line text-ink hover:bg-soft'
+                }`}
+              >
+                {selected?.id === s.id ? 'Gestionando' : 'Usuarios'}
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
 
       {/* Usuarios de la subcuenta seleccionada */}
       {selected && (
