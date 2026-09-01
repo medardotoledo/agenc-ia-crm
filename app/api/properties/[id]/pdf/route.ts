@@ -96,14 +96,14 @@ export async function GET(
         property: property as Property,
         account: account as Account | null,
         agents,
-      })
+      }) as any
     );
 
     // 5. Nombre de archivo limpio
     const slug = (property.slug || property.id).replace(/[^a-zA-Z0-9-_]/g, '-');
     const filename = `ficha-${slug}.pdf`;
 
-    return new Response(pdfBuffer, {
+    return new Response(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',

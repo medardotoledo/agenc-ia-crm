@@ -68,7 +68,7 @@ export const tagsService = {
       .eq('account_id', accountId)
       .in('contact_id', contactIds);
     if (error) throw error;
-    for (const row of (data ?? []) as Array<{ contact_id: string; tags: Tag }>) {
+    for (const row of (data ?? []) as unknown as Array<{ contact_id: string; tags: Tag }>) {
       if (!row.tags) continue;
       const arr = map.get(row.contact_id) ?? [];
       arr.push(row.tags);

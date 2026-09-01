@@ -26,6 +26,7 @@ export async function signOut() {
 /** Busca el perfil en la tabla users por email y lo vincula al auth user
  *  la primera vez (auth_user_id). Devuelve null si el email no es miembro. */
 export async function resolveProfile(session: Session): Promise<Profile | null> {
+  const supabase = createBrowserSupabaseClient()
   if (!supabase) return null
   const email = session.user.email
   if (!email) return null

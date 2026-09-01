@@ -12,14 +12,15 @@ function svc() {
   );
 }
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const body = await req.json();
   const { name, description, image_url, href, position } = body;
 
   const { data, error } = await svc()
     .from('website_zones')
     .update({ name, description, image_url, href, position })
-    .eq('id', params.id)
+    .eq('id', id)
     .select()
     .single();
 
@@ -27,12 +28,13 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   return Response.json({ zone: data });
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   // Eliminar imagen de storage si existe
   const { data: zone } = await svc()
     .from('website_zones')
     .select('image_url')
-    .eq('id', params.id)
+    .eq('id', id)
     .single();
 
   if (zone?.image_url) {
@@ -40,7 +42,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     if (path) await svc().storage.from('website-assets').remove([path]);
   }
 
-  const { error } = await svc().from('website_zones').delete().eq('id', params.id);
+  const { error } = await svc().from('website_zones').delete().eq('id', id);
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ success: true });
 }

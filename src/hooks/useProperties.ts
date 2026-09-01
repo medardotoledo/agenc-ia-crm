@@ -15,6 +15,7 @@ interface Property {
   account_id: string;
   easybroker_id?: string;
   title: string;
+  slug?: string;
   description_short?: string;
   description_long?: string;
   price: number;

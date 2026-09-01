@@ -80,7 +80,7 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
   }
 
   // Etiquetas por contacto (para pintar chips en el board).
-  const contactIds = (opps.data as Array<{ contacts: { id: string } }>).map((o) => o.contacts.id)
+  const contactIds = (opps.data as unknown as Array<{ contacts: { id: string } }>).map((o) => o.contacts.id)
   const tagsByContact = new Map<string, { id: string; name: string; color: string }[]>()
   if (contactIds.length) {
     const { data: tagRows } = await supabase
@@ -88,7 +88,7 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
       .select('contact_id, tags(id, name, color)')
       .eq('account_id', accountId)
       .in('contact_id', contactIds)
-    for (const r of (tagRows ?? []) as Array<{ contact_id: string; tags: { id: string; name: string; color: string } | null }>) {
+    for (const r of (tagRows ?? []) as unknown as Array<{ contact_id: string; tags: { id: string; name: string; color: string } | null }>) {
       if (!r.tags) continue
       const arr = tagsByContact.get(r.contact_id) ?? []
       arr.push(r.tags)

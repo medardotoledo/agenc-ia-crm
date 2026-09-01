@@ -84,3 +84,6 @@ export interface Pending {
   urgency: 'urgente' | 'hoy' | 'mañana' | 'semana'
   when: string
 }
+
+export * from './database'
+
