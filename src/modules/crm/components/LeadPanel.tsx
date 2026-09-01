@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound } from 'lucide-react'
+import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, StageSelect, CHANNEL_LABEL } from './ui'
 import { TagEditor } from './TagEditor'
-import { STAGE_META, TEMP_META } from '@/lib/data/mock'
+import { STAGE_META, TEMP_META, APPOINTMENTS } from '@/lib/data/mock'
 import { openWhatsApp } from '@/lib/whatsapp'
 import type { NoteType, Lead, Stage, Temperature } from '@/types'
 
@@ -60,14 +60,21 @@ function ProfileTab({ lead }: { lead: Lead }) {
         </div>
         <div>
           <label className={LABEL}>Etapa</label>
-          <select value={lead.stage} onChange={(e) => updateLead(lead.id, { stage: e.target.value as Stage })} className={FIELD}>
-            {Object.entries(STAGE_META).map(([k, m]) => <option key={k} value={k}>{stageLabels[k] ?? m.label}</option>)}
+          <select defaultValue={lead.stage} onChange={save('stage')} className={FIELD}>
+            <option value="nuevo">{stageLabels.nuevo ?? 'Nuevo'}</option>
+            <option value="contactado">{stageLabels.contactado ?? 'Contactado'}</option>
+            <option value="propuesta">{stageLabels.propuesta ?? 'Propuesta'}</option>
+            <option value="cierre">{stageLabels.cierre ?? 'Ganado'}</option>
+            <option value="perdido">{stageLabels.perdido ?? 'Perdido'}</option>
           </select>
         </div>
         <div>
           <label className={LABEL}>Temperatura</label>
-          <select value={lead.temperature} onChange={(e) => updateLead(lead.id, { temperature: e.target.value as Temperature })} className={FIELD}>
-            {Object.entries(TEMP_META).map(([k, m]) => <option key={k} value={k}>{m.icon} {m.label}</option>)}
+          <select defaultValue={lead.temperature} onChange={save('temperature')} className={FIELD}>
+            <option value="hot">🔥 Caliente</option>
+            <option value="warm">✓ Tibio</option>
+            <option value="cold">❄ Frío</option>
+            <option value="lost">✕ Perdido</option>
           </select>
         </div>
       </div>
@@ -75,16 +82,124 @@ function ProfileTab({ lead }: { lead: Lead }) {
         <label className={LABEL}>Etiquetas</label>
         <TagEditor lead={lead} />
       </div>
-      <p className="pt-1 text-[11px] text-ink-soft">Los cambios se guardan automáticamente al salir de cada campo ✓</p>
+      <p className="pt-2 text-center text-xs text-ink-soft">Los cambios se guardan automáticamente al salir de cada campo ✓</p>
+    </div>
+  )
+}
+
+/* Pestaña de Citas agendadas y agendamiento rápido para este prospecto */
+function CitasTab({ lead }: { lead: Lead }) {
+  const [agendada, setAgendada] = useState(false)
+  const [fecha, setFecha] = useState('2026-06-12')
+  const [hora, setHora] = useState('10:00 am')
+  const [tipo, setTipo] = useState('Google Meet')
+
+  const citasLead = APPOINTMENTS.filter((a) => a.clientName.toLowerCase().includes(lead.name.toLowerCase()) || a.status === 'confirmada').slice(0, 2)
+
+  return (
+    <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      <div className="rounded-xl border border-line bg-soft/50 p-4">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-ink mb-3 flex items-center gap-1.5">
+          <Calendar size={14} className="text-primary" /> Agendar Cita con {lead.name}
+        </h3>
+        {agendada ? (
+          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-center space-y-2">
+            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-green-700">
+              <Check size={18} />
+            </div>
+            <p className="text-xs font-bold text-green-800">¡Cita agendada con éxito!</p>
+            <p className="text-[11px] text-green-700">
+              📅 {fecha} a las {hora} ({tipo})
+            </p>
+            <button
+              onClick={() => setAgendada(false)}
+              className="text-xs text-primary font-semibold underline pt-1 block mx-auto"
+            >
+              Agendar otra cita
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className={LABEL}>Fecha</label>
+                <input
+                  type="date"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-app p-2 text-xs outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className={LABEL}>Hora</label>
+                <select
+                  value={hora}
+                  onChange={(e) => setHora(e.target.value)}
+                  className="w-full rounded-lg border border-line bg-app p-2 text-xs outline-none focus:border-primary"
+                >
+                  <option value="9:00 am">9:00 am</option>
+                  <option value="9:30 am">9:30 am</option>
+                  <option value="10:00 am">10:00 am</option>
+                  <option value="11:00 am">11:00 am</option>
+                  <option value="2:00 pm">2:00 pm</option>
+                  <option value="3:30 pm">3:30 pm</option>
+                  <option value="4:00 pm">4:00 pm</option>
+                  <option value="5:00 pm">5:00 pm</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className={LABEL}>Modalidad / Canal</label>
+              <select
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value)}
+                className="w-full rounded-lg border border-line bg-app p-2 text-xs outline-none focus:border-primary"
+              >
+                <option value="Google Meet">📹 Google Meet (Videollamada)</option>
+                <option value="WhatsApp">💬 WhatsApp Call</option>
+                <option value="Llamada Telefónica">📞 Llamada Telefónica</option>
+                <option value="Presencial / Clínica">🏥 Presencial / Clínica</option>
+              </select>
+            </div>
+            <button
+              onClick={() => setAgendada(true)}
+              className="w-full rounded-lg bg-primary py-2 text-xs font-bold text-inverse hover:opacity-90 transition flex items-center justify-center gap-1.5"
+            >
+              <Plus size={14} /> Confirmar Cita en Calendario
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-ink-soft mb-2">Citas Registradas</h3>
+        <div className="space-y-2">
+          {citasLead.map((a) => (
+            <div key={a.id} className="rounded-xl border border-line bg-app p-3 text-xs space-y-1">
+              <div className="flex items-center justify-between font-semibold text-ink">
+                <span className="flex items-center gap-1.5 text-primary">
+                  <Clock size={12} /> {a.time} ({a.day === 'hoy' ? 'Hoy' : 'Mañana'})
+                </span>
+                <span className="rounded-full bg-stage-close-bg px-2 py-0.5 text-[10px] font-bold text-stage-close-text">
+                  {a.status}
+                </span>
+              </div>
+              <p className="text-ink-soft flex items-center gap-1 text-[11px]">
+                <Video size={11} /> {a.channelLabel} · 30 min
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
 export default function LeadPanel() {
-  const { selectedLeadId, closePanel, panelTab, openLead, notes, messages, addNote, sendMessage } = useApp()
+  const { selectedLeadId, closePanel, panelTab, openLead, addNote, sendMessage, notes, messages } = useApp()
   const { leads, updateLead } = useLeads()
-  const [noteType, setNoteType] = useState<NoteType>('note')
   const [text, setText] = useState('')
+  const [noteType, setNoteType] = useState<NoteType>('note')
   const [chatText, setChatText] = useState('')
 
   const lead = leads.find((l) => l.id === selectedLeadId)
@@ -142,21 +257,32 @@ export default function LeadPanel() {
 
         {/* Tabs */}
         <div className="flex border-b border-line px-5">
-          {(['perfil', 'notas', 'chat'] as const).map((t) => (
+          {(['perfil', 'notas', 'chat', 'citas'] as const).map((t) => (
             <button
               key={t}
               onClick={() => openLead(lead.id, t)}
-              className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-semibold capitalize transition-colors ${
+              className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-semibold capitalize transition-colors ${
                 panelTab === t ? 'border-primary-light text-primary-light' : 'border-transparent text-ink-soft hover:text-ink'
               }`}
             >
-              {t === 'perfil' ? <UserRound size={14} /> : t === 'notas' ? <StickyNote size={14} /> : <MessageCircle size={14} />} {t}
+              {t === 'perfil' ? (
+                <UserRound size={13} />
+              ) : t === 'notas' ? (
+                <StickyNote size={13} />
+              ) : t === 'chat' ? (
+                <MessageCircle size={13} />
+              ) : (
+                <Calendar size={13} />
+              )}{' '}
+              {t === 'citas' ? 'Citas' : t}
             </button>
           ))}
         </div>
 
         {panelTab === 'perfil' ? (
           <ProfileTab lead={lead} />
+        ) : panelTab === 'citas' ? (
+          <CitasTab lead={lead} />
         ) : panelTab === 'notas' ? (
           <>
             {/* Historial de notas */}

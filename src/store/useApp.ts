@@ -16,7 +16,7 @@ interface CrmCtx {
 
 /* ============ UI + datos de actividad ============ */
 
-export type PanelTab = 'perfil' | 'notas' | 'chat';
+export type PanelTab = 'perfil' | 'notas' | 'chat' | 'citas';
 
 interface AppState {
   section: Section;
