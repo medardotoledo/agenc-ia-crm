@@ -8,13 +8,14 @@
  */
 
 import { useEffect } from 'react';
-import { Table2, Kanban as KanbanIcon, FileSpreadsheet, Plus } from 'lucide-react';
+import { Table2, Kanban as KanbanIcon, FileSpreadsheet, Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { useApp } from '@/store/useApp';
 import { useCrmData } from '@/modules/crm/useCrmData';
 import type { ViewMode } from '@/types';
 import KanbanView from '@/modules/crm/views/KanbanView';
 import TableView from '@/modules/crm/views/TableView';
 import ExcelView from '@/modules/crm/views/ExcelView';
+import CalendarView from '@/modules/crm/views/CalendarView';
 import LeadPanel from '@/modules/crm/components/LeadPanel';
 import NewLeadModal from '@/modules/crm/components/NewLeadModal';
 
@@ -22,6 +23,7 @@ const VIEWS: { id: ViewMode; label: string; Icon: typeof Table2 }[] = [
   { id: 'tabla', label: 'Tabla', Icon: Table2 },
   { id: 'kanban', label: 'Kanban', Icon: KanbanIcon },
   { id: 'excel', label: 'Excel', Icon: FileSpreadsheet },
+  { id: 'calendario', label: 'Citas / Calendario', Icon: CalendarIcon },
 ];
 
 export default function LeadsPage() {
@@ -44,7 +46,7 @@ export default function LeadsPage() {
       {/* Toolbar del módulo */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Leads</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Prospectos</h1>
           {!cloud && <span className="rounded-md bg-soft px-2 py-1 text-xs text-ink-soft">sin pipeline configurado</span>}
         </div>
         <div className="flex items-center gap-2">
@@ -71,7 +73,15 @@ export default function LeadsPage() {
       </div>
 
       {/* Vista activa */}
-      {view === 'kanban' ? <KanbanView /> : view === 'excel' ? <ExcelView /> : <TableView />}
+      {view === 'kanban' ? (
+        <KanbanView />
+      ) : view === 'excel' ? (
+        <ExcelView />
+      ) : view === 'calendario' ? (
+        <CalendarView />
+      ) : (
+        <TableView />
+      )}
 
       {/* Panel de detalle + modal de alta (se muestran según estado del store) */}
       <LeadPanel />

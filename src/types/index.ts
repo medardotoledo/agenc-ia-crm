@@ -2,7 +2,7 @@ export type Stage = 'nuevo' | 'contactado' | 'propuesta' | 'cierre' | 'perdido'
 export type Temperature = 'hot' | 'warm' | 'cold' | 'lost'
 export type NoteType = 'note' | 'call' | 'whatsapp' | 'email'
 export type Channel = 'whatsapp' | 'facebook' | 'instagram' | 'email'
-export type ViewMode = 'tabla' | 'kanban' | 'excel'
+export type ViewMode = 'tabla' | 'kanban' | 'excel' | 'calendario'
 export type Section = 'dashboard' | 'leads' | 'conversaciones' | 'calendario' | 'reportes' | 'actividades' | 'ajustes'
 
 export interface Lead {
