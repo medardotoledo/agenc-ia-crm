@@ -62,7 +62,7 @@ interface AppState {
 
 export const useApp = create<AppState>((set, get) => ({
   section: 'leads',
-  view: 'kanban',
+  view: 'tabla',
   selectedLeadId: null,
   panelTab: 'notas',
   period: 'mes',
