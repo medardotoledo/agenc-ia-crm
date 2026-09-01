@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check } from 'lucide-react'
+import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check, Maximize2, Minimize2 } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, StageSelect, CHANNEL_LABEL } from './ui'
 import { TagEditor } from './TagEditor'
@@ -201,6 +201,7 @@ export default function LeadPanel() {
   const [text, setText] = useState('')
   const [noteType, setNoteType] = useState<NoteType>('note')
   const [chatText, setChatText] = useState('')
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const lead = leads.find((l) => l.id === selectedLeadId)
   if (!lead) return null
@@ -225,7 +226,11 @@ export default function LeadPanel() {
       {/* Backdrop móvil */}
       <div className="fixed inset-0 z-40 bg-dark/40 lg:hidden" onClick={closePanel} />
 
-      <aside className="animate-panel fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-app shadow-2xl sm:w-105">
+      <aside
+        className={`animate-panel fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-app shadow-2xl transition-all duration-300 ease-in-out ${
+          isExpanded ? 'w-full sm:w-[840px] max-w-[92vw]' : 'w-full sm:w-105'
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           <Avatar name={lead.name} size="lg" />
@@ -237,6 +242,15 @@ export default function LeadPanel() {
             value={lead.stage}
             onChange={(s) => updateLead(lead.id, s === 'perdido' ? { stage: s, temperature: 'lost' } : { stage: s })}
           />
+          {/* Botón de expandir al doble (solo escritorio) */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="hidden sm:flex items-center justify-center rounded-lg p-1.5 text-ink-soft hover:bg-soft hover:text-ink transition"
+            title={isExpanded ? 'Reducir a tamaño estándar' : 'Expandir al doble de tamaño'}
+            aria-label="Alternar ancho"
+          >
+            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
           <button onClick={closePanel} className="rounded-lg p-1.5 text-ink-soft hover:bg-soft" aria-label="Cerrar">
             <X size={18} />
           </button>
