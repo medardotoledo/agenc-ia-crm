@@ -1,0 +1,88 @@
+/* ════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM — FUENTE ÚNICA DE VERDAD
+   ════════════════════════════════════════════════════════════════
+   Aquí viven TODOS los colores, tipografías y medidas de la app.
+   Cambia un valor aquí y cambia en TODA la app (CRM, propiedades,
+   page-builder, calendario...). Esto es el "molde".
+
+   Los VALORES de aquí son el tema POR DEFECTO (nivel Matriz / tu marca).
+   Cada Instancia (inmobiliaria) puede sobreescribir los colores de MARCA
+   en tiempo real desde la base de datos — ver sección "MARCA" abajo.
+   ════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ──────────────────────────────────────────────────────────────
+     MARCA  ← estos 4 son los que una Instancia puede personalizar
+     ────────────────────────────────────────────────────────────── */
+  --color-primary: #1e3a8a;        /* azul marino — botones, items activos */
+  --color-primary-light: #2563eb;  /* azul — hover, acentos */
+  --color-accent: #f59e0b;         /* ámbar/dorado — la chispa de marca */
+  --color-sidebar: #0f172a;        /* fondo del menú lateral */
+
+  /* ──────────────────────────────────────────────────────────────
+     NEUTRALES  ← estructura; normalmente NO cambian por cliente
+     ────────────────────────────────────────────────────────────── */
+  --color-dark: #0f172a;
+  --color-app: #ffffff;            /* fondo de tarjetas */
+  --color-soft: #f8fafc;           /* fondo de página */
+  --color-cream: #faf9f5;
+  --color-ink: #0f172a;            /* texto principal */
+  --color-ink-soft: #64748b;       /* texto secundario */
+  --color-inverse: #ffffff;        /* texto sobre fondos oscuros */
+  --color-line: #e2e8f0;           /* bordes */
+  --color-line-soft: #f1f5f9;      /* bordes muy suaves / fondos de barra */
+
+  /* ──────────────────────────────────────────────────────────────
+     ESTADOS DE NEGOCIO — Etapas del pipeline (bg + text)
+     ────────────────────────────────────────────────────────────── */
+  --color-stage-new-bg: #dbeafe;       --color-stage-new-text: #1e40af;
+  --color-stage-contact-bg: #ede9fe;   --color-stage-contact-text: #5b21b6;
+  --color-stage-proposal-bg: #fef3c7;  --color-stage-proposal-text: #92400e;
+  --color-stage-close-bg: #d1fae5;     --color-stage-close-text: #065f46;
+  --color-stage-lost-bg: #fee2e2;      --color-stage-lost-text: #991b1b;
+
+  /* Temperatura del lead */
+  --color-temp-hot-bg: #fef3c7;   --color-temp-hot-text: #92400e;
+  --color-temp-warm-bg: #f0fdf4;  --color-temp-warm-text: #166534;
+  --color-temp-cold-bg: #eff6ff;  --color-temp-cold-text: #1e40af;
+
+  /* Tipos de actividad */
+  --color-note-bg: #ede9fe;  --color-note-text: #5b21b6;
+  --color-call-bg: #d1fae5;  --color-call-text: #065f46;
+  --color-wa-bg: #dcfce7;    --color-wa-text: #166534;
+  --color-mail-bg: #dbeafe;  --color-mail-text: #1e40af;
+
+  /* ──────────────────────────────────────────────────────────────
+     CANALES de comunicación
+     ────────────────────────────────────────────────────────────── */
+  --color-ch-whatsapp: #25d366;
+  --color-ch-facebook: #1877f2;
+  --color-ch-instagram: #e1306c;
+  --color-ch-email: #5b21b6;
+
+  /* ──────────────────────────────────────────────────────────────
+     SEMÁNTICOS — éxito / error / advertencia
+     ────────────────────────────────────────────────────────────── */
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-warning: #ea580c;
+
+  /* ──────────────────────────────────────────────────────────────
+     TIPOGRAFÍA
+     ────────────────────────────────────────────────────────────── */
+  --font-sans: "Inter", "Geist", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ──────────────────────────────────────────────────────────────
+     RADIOS (esquinas redondeadas)
+     ────────────────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 1rem;
+}
