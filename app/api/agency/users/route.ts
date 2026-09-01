@@ -107,3 +107,83 @@ export async function POST(request: Request) {
     return authErrorResponse(e);
   }
 }
+
+export async function PATCH(request: Request) {
+  try {
+    const { agencyAccountId, svc } = await requireAgencyOwner(request);
+    const b = await request.json();
+    const userId = String(b?.userId ?? '');
+    const accountId = String(b?.accountId ?? '');
+    const name = b?.name ? String(b.name).trim() : undefined;
+    const role = b?.role === 'admin' ? 'admin' : (b?.role === 'agent' ? 'agent' : undefined);
+    const onlyAssigned = b?.only_assigned_data !== undefined ? Boolean(b.only_assigned_data) : undefined;
+    const permissions = (b?.permissions && typeof b.permissions === 'object') ? b.permissions : undefined;
+    const password = b?.password ? String(b.password) : undefined;
+
+    if (!userId || !accountId) {
+      return Response.json({ error: 'userId y accountId requeridos' }, { status: 400 });
+    }
+    if (!(await assertOwnsSubAccount(svc, agencyAccountId, accountId))) {
+      return Response.json({ error: 'Subcuenta no pertenece a tu agencia' }, { status: 403 });
+    }
+
+    // Si se envía nueva contraseña, actualizar en auth.admin
+    if (password) {
+      if (password.length < 6) {
+        return Response.json({ error: 'La contraseña debe tener al menos 6 caracteres' }, { status: 400 });
+      }
+      const { data: userData } = await svc.from('users').select('auth_user_id').eq('id', userId).single();
+      if (userData?.auth_user_id) {
+        await svc.auth.admin.updateUserById(userData.auth_user_id, { password });
+      }
+    }
+
+    const updates: Record<string, any> = {};
+    if (name !== undefined) updates.name = name;
+    if (role !== undefined) updates.role = role;
+    if (onlyAssigned !== undefined) updates.only_assigned_data = onlyAssigned;
+    if (permissions !== undefined) updates.permissions = permissions;
+
+    const { data: updated, error } = await svc
+      .from('users')
+      .update(updates)
+      .eq('id', userId)
+      .eq('account_id', accountId)
+      .select('id, name, email, role, only_assigned_data, permissions')
+      .single();
+
+    if (error) throw error;
+    return Response.json({ user: updated });
+  } catch (e) {
+    return authErrorResponse(e);
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { agencyAccountId, svc } = await requireAgencyOwner(request);
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId') || '';
+    const accountId = searchParams.get('accountId') || '';
+
+    if (!userId || !accountId) {
+      return Response.json({ error: 'userId y accountId requeridos' }, { status: 400 });
+    }
+    if (!(await assertOwnsSubAccount(svc, agencyAccountId, accountId))) {
+      return Response.json({ error: 'Subcuenta no pertenece a tu agencia' }, { status: 403 });
+    }
+
+    const { data: userData } = await svc.from('users').select('auth_user_id').eq('id', userId).single();
+    if (userData?.auth_user_id) {
+      await svc.auth.admin.deleteUser(userData.auth_user_id);
+    }
+
+    const { error } = await svc.from('users').delete().eq('id', userId).eq('account_id', accountId);
+    if (error) throw error;
+
+    return Response.json({ success: true });
+  } catch (e) {
+    return authErrorResponse(e);
+  }
+}
+

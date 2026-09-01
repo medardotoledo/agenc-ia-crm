@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, SlidersHorizontal, BedDouble, Bath, Maximize2, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -105,7 +105,7 @@ function PropertyCard({ p }: { p: Property }) {
   );
 }
 
-export default function PropiedadesPage() {
+function PropiedadesContent() {
   const { account_id } = useTheme();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -327,3 +327,12 @@ export default function PropiedadesPage() {
     </div>
   );
 }
+
+export default function PropiedadesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-soft flex items-center justify-center text-ink-soft">Cargando catálogo...</div>}>
+      <PropiedadesContent />
+    </Suspense>
+  );
+}
+

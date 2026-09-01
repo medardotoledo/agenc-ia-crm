@@ -1,4 +1,4 @@
-import { Mail, MessageSquare } from 'lucide-react';
+import { MessageSquare, Users, Kanban, Calendar } from 'lucide-react';
 import type { ModuleManifest } from '../types';
 
 /**
@@ -10,6 +10,7 @@ export const crmModule: ModuleManifest = {
   name: 'CRM',
   navGroup: 'CRM',
   nav: [
+    { href: '/admin/leads', label: 'Prospectos / Pipeline', Icon: Kanban },
     { href: '/admin/conversaciones', label: 'Conversaciones', Icon: MessageSquare },
   ],
   permissions: [

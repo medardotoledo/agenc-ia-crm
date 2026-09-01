@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -50,10 +51,19 @@ function AdminShell({ children }: { children: React.ReactNode }) {
     sidebar: account?.brand_sidebar,
   };
 
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/auth/login');
+    }
+  }, [loading, user, router]);
+
   if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-soft">
-        <div className="text-ink-soft">Cargando...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+          <div className="text-sm font-medium text-ink-soft">Cargando sesión...</div>
+        </div>
       </div>
     );
   }

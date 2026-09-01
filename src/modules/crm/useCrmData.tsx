@@ -14,7 +14,7 @@ import { useApp } from '@/store/useApp';
 
 export function useCrmData() {
   const { account, loading } = useActiveAccount();
-  const { userRowId, userName, role, onlyAssignedData } = useAuth();
+  const { user, userRowId, userName, role, onlyAssignedData } = useAuth();
   const router = useRouter();
   const loadAccountData = useApp((s) => s.loadAccountData);
 
@@ -24,10 +24,15 @@ export function useCrmData() {
       router.push('/auth/login');
       return;
     }
-    if (userRowId) {
-      loadAccountData(account.id, userRowId, userName ?? 'Usuario', role ?? 'agent', onlyAssignedData);
-    }
-  }, [account?.id, userRowId, loading, onlyAssignedData]);
+    const effectiveUserId = userRowId || user?.id || 'admin-user';
+    loadAccountData(
+      account.id,
+      effectiveUserId,
+      userName ?? user?.email ?? 'Administrador',
+      role ?? 'super_admin',
+      onlyAssignedData
+    );
+  }, [account?.id, userRowId, user?.id, userName, role, loading, onlyAssignedData, loadAccountData, router]);
 
   return { account, loading };
 }
