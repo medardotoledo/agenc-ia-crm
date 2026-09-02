@@ -33,6 +33,7 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
         setStatus('disconnected');
         setQrCode(null);
         if (data.error) setError(data.error);
+        else if (data.debug_error) setError(`Error interno: ${data.debug_error}`);
       }
     } catch (err: any) {
       setError(err.message || 'Error conectando con el servicio de WhatsApp');
