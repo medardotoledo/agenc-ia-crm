@@ -53,13 +53,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 3. Si la instancia no existe, crearla
+    // 3. Si la instancia no existe, crearla y obtener QR
     const createRes = await fetch(`${EVOLUTION_API_URL}/instance/create`, {
       method: 'POST',
       headers: getEvolutionHeaders(),
       body: JSON.stringify({
         instanceName,
-        token: instanceName,
         qrcode: true,
         integration: 'WHATSAPP-BAILEYS',
       }),
@@ -67,11 +66,31 @@ export async function GET(request: NextRequest) {
 
     if (createRes.ok) {
       const createData = await createRes.json();
-      return NextResponse.json({
-        status: 'qr_ready',
-        instanceName,
-        qrcode: createData?.qrcode?.base64 || createData?.hash?.base64,
-      });
+      const qr = createData?.qrcode?.base64 || createData?.hash?.base64 || createData?.base64;
+      if (qr) {
+        return NextResponse.json({
+          status: 'qr_ready',
+          instanceName,
+          qrcode: qr,
+        });
+      }
+    }
+
+    // 4. Segundo intento de connect
+    const retryConnect = await fetch(`${EVOLUTION_API_URL}/instance/connect/${instanceName}`, {
+      headers: getEvolutionHeaders(),
+      cache: 'no-store',
+    });
+    if (retryConnect.ok) {
+      const retryData = await retryConnect.json();
+      const qr = retryData?.base64 || retryData?.qrcode?.base64 || retryData?.code;
+      if (qr) {
+        return NextResponse.json({
+          status: 'qr_ready',
+          instanceName,
+          qrcode: qr,
+        });
+      }
     }
 
     return NextResponse.json({
@@ -82,7 +101,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error in /api/whatsapp/instance GET:', error);
     return NextResponse.json(
-      { error: error.message || 'Error consultando WhatsApp' },
+      { error: error.message || 'Error comunicando con Evolution API' },
       { status: 500 }
     );
   }

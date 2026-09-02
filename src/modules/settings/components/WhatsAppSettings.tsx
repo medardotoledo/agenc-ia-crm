@@ -15,11 +15,11 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
   const [error, setError] = useState<string | null>(null);
 
   const checkStatus = async () => {
-    if (!accountId) return;
+    const effectiveId = accountId || 'default-account';
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/whatsapp/instance?accountId=${accountId}`);
+      const res = await fetch(`/api/whatsapp/instance?accountId=${effectiveId}`);
       const data = await res.json();
 
       if (data.status === 'connected') {
@@ -32,6 +32,7 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
       } else {
         setStatus('disconnected');
         setQrCode(null);
+        if (data.error) setError(data.error);
       }
     } catch (err: any) {
       setError(err.message || 'Error conectando con el servicio de WhatsApp');
