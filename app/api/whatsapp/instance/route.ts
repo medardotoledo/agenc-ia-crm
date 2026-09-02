@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Si la instancia no existe, crearla y obtener QR
+    let fetchError: any = null;
     try {
       const createRes = await fetchEvolution('/instance/create', {
         method: 'POST',
@@ -108,14 +109,15 @@ export async function GET(request: NextRequest) {
           });
         }
       }
-    } catch (e) {
-      // Continuar
+    } catch (e: any) {
+      fetchError = e.message || 'Unknown error';
     }
 
     return NextResponse.json({
       status: 'disconnected',
       instanceName,
       message: 'Instancia lista para conectar',
+      debug_error: fetchError,
     });
   } catch (error: any) {
     console.error('Error in /api/whatsapp/instance GET:', error);
