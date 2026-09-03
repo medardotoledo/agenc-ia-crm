@@ -111,7 +111,21 @@ export const useApp = create<AppState>((set, get) => ({
       ),
     }));
     const lead = useLeads.getState().leads.find((l) => l.id === leadId);
-    if (lead && ctx) db.persistMessage(ctx.accountId, ctx.userId, lead, channel, body).catch((e) => console.warn('persistMessage:', e.message));
+    if (lead && ctx) {
+      db.persistMessage(ctx.accountId, ctx.userId, lead, channel, body).catch((e) => console.warn('persistMessage:', e.message));
+      
+      if (channel === 'whatsapp' && lead.phone) {
+        fetch('/api/whatsapp/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instanceName: `sub_${ctx.accountId.replace(/-/g, '_')}`,
+            number: lead.phone.replace(/\D/g, ''),
+            text: body,
+          })
+        }).catch(err => console.error('Error enviando WhatsApp:', err));
+      }
+    }
   },
   loadAccountData: async (accountId, userId, userName, role, onlyAssigned = false) => {
     try {

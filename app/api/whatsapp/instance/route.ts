@@ -56,6 +56,20 @@ export async function GET(request: NextRequest) {
       if (statusRes.ok) {
         const statusData = await statusRes.json();
         if (statusData?.instance?.state === 'open') {
+          // Asegurar que el webhook esté configurado
+          await fetchEvolution(`/webhook/set/${instanceName}`, {
+            method: 'POST',
+            body: JSON.stringify({
+              webhook: {
+                enabled: true,
+                url: 'https://app.crmagentico.online/api/whatsapp/webhook',
+                byEvents: false,
+                base64: false,
+                events: ['MESSAGES_UPSERT']
+              }
+            })
+          }).catch(e => console.warn('Failed to set webhook:', e));
+
           return NextResponse.json({
             status: 'connected',
             instanceName,
@@ -100,6 +114,21 @@ export async function GET(request: NextRequest) {
 
       if (createRes.ok) {
         const createData = await createRes.json();
+        
+        // Configurar webhook al crear
+        await fetchEvolution(`/webhook/set/${instanceName}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            webhook: {
+              enabled: true,
+              url: 'https://app.crmagentico.online/api/whatsapp/webhook',
+              byEvents: false,
+              base64: false,
+              events: ['MESSAGES_UPSERT']
+            }
+          })
+        }).catch(e => console.warn('Failed to set webhook:', e));
+
         const qr = createData?.qrcode?.base64 || createData?.hash?.base64 || createData?.base64;
         if (qr) {
           return NextResponse.json({
