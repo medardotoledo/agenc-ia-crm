@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -44,20 +44,13 @@ export async function POST(req: Request) {
     const senderName = messageData?.pushName || 'WhatsApp Contact';
 
     // 1. Encontrar o crear contacto
-    let { data: contacts } = await supabase
-      .from('contacts')
-      .select('id')
-      .eq('account_id', accountId)
-      .eq('phone_e164', phone);
+    let { data: contacts } = await supabase.from('contacts').select('id').eq('account_id', accountId).eq('phone_e164', phone);
 
     let contactId;
     if (contacts && contacts.length > 0) {
       contactId = contacts[0].id;
     } else {
-      const { data: newContact, error: errC } = await supabase
-        .from('contacts')
-        .insert({ account_id: accountId, name: senderName, phone_e164: phone, source: 'WhatsApp' })
-        .select('id').single();
+      const { data: newContact, error: errC } = await supabase.from('contacts').insert({ account_id: accountId, name: senderName, phone_e164: phone, source: 'WhatsApp' }).select('id').single();
       if (errC) throw errC;
       contactId = newContact.id;
 
@@ -65,9 +58,7 @@ export async function POST(req: Request) {
       const { data: stage } = await supabase.from('stages').select('id').eq('account_id', accountId).order('position').limit(1).maybeSingle();
 
       if (pipeline && stage) {
-        await supabase.from('opportunities').insert({
-          account_id: accountId, contact_id: contactId, pipeline_id: pipeline.id, stage_id: stage.id, temperature: 'hot', score: 50
-        });
+        await supabase.from('opportunities').insert({ account_id: accountId, contact_id: contactId, pipeline_id: pipeline.id, stage_id: stage.id, temperature: 'hot', score: 50 });
       }
     }
 
@@ -90,16 +81,16 @@ export async function POST(req: Request) {
     const { data: ghlToken } = await supabase.from('ghl_installations').select('access_token').eq('location_id', accountId).maybeSingle();
 
     if (ghlToken?.access_token) {
-      const ghlHeaders = { 'Authorization': \Bearer \\, 'Content-Type': 'application/json', 'Version': '2021-04-15' };
+      const ghlHeaders = { 'Authorization': `Bearer ${ghlToken.access_token}`, 'Content-Type': 'application/json', 'Version': '2021-04-15' };
       let ghlContactId = null;
-      const searchRes = await fetch(\https://services.leadconnectorhq.com/contacts/?query=\&locationId=\\, { headers: ghlHeaders });
+      const searchRes = await fetch(`https://services.leadconnectorhq.com/contacts/?query=${phone}&locationId=${accountId}`, { headers: ghlHeaders });
       if (searchRes.ok) {
         const searchData = await searchRes.json();
         if (searchData.contacts?.length > 0) ghlContactId = searchData.contacts[0].id;
       }
       if (!ghlContactId) {
-        const createRes = await fetch(\https://services.leadconnectorhq.com/contacts/\, {
-          method: 'POST', headers: ghlHeaders, body: JSON.stringify({ name: senderName, phone: \+\\, locationId: accountId })
+        const createRes = await fetch(`https://services.leadconnectorhq.com/contacts/`, {
+          method: 'POST', headers: ghlHeaders, body: JSON.stringify({ name: senderName, phone: `+${phone}`, locationId: accountId })
         });
         if (createRes.ok) {
           const createData = await createRes.json();
@@ -107,7 +98,7 @@ export async function POST(req: Request) {
         }
       }
       if (ghlContactId) {
-        await fetch(\https://services.leadconnectorhq.com/conversations/messages/inbound\, {
+        await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
           method: 'POST', headers: ghlHeaders, body: JSON.stringify({ type: 'Custom', contactId: ghlContactId, body: textContent })
         });
       }

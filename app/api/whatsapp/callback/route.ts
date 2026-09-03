@@ -14,12 +14,12 @@ export async function GET(req: Request) {
     const code = searchParams.get('code');
 
     if (!code) {
-      return NextResponse.json({ error: 'Falta el par·metro code' }, { status: 400 });
+      return NextResponse.json({ error: 'Falta el par√°metro code' }, { status: 400 });
     }
 
     const encodedCredentials = Buffer.from(GHL_CLIENT_ID + ':' + GHL_CLIENT_SECRET).toString('base64');
     
-    // Intercambiar cÛdigo por tokens
+    // Intercambiar c√≥digo por tokens
     const tokenResponse = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -58,7 +58,7 @@ export async function GET(req: Request) {
 
     if (dbError) throw dbError;
 
-    // Redirigir al usuario al CRM de vuelta con mensaje de Èxito
+    // Redirigir al usuario al CRM de vuelta con mensaje de √©xito
     return NextResponse.redirect('https://app.crmagentico.online/crm?ghl_connected=true');
 
   } catch (error: any) {
@@ -66,4 +66,3 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
