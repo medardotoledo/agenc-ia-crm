@@ -109,7 +109,36 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="flex items-center justify-between pt-2">
+            <button
+              onClick={async () => {
+                const phone = prompt('Ingresa el número a donde enviar la prueba (incluye código de país sin el +, ej: 5215500000000):');
+                if (!phone) return;
+                setLoading(true);
+                try {
+                  const effectiveId = accountId || 'default-account';
+                  const res = await fetch('/api/whatsapp/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      instanceName: `sub_${effectiveId.replace(/-/g, '_')}`,
+                      number: phone,
+                      text: '¡Hola! Este es un mensaje de prueba desde CRM Agentico. 🤖✨'
+                    })
+                  });
+                  if (!res.ok) throw new Error(await res.text());
+                  alert('¡Mensaje enviado con éxito!');
+                } catch(e: any) {
+                  alert('Error al enviar: ' + e.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              className="px-3 py-1.5 text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 rounded-lg transition"
+            >
+              Probar Mensaje
+            </button>
             <button
               onClick={handleDisconnect}
               disabled={loading}
