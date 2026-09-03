@@ -14,15 +14,15 @@ export async function POST(req: Request) {
 
     const urlsToTry = [
       EVOLUTION_API_URL,
+      'http://2.24.65.127:8085',
       'http://evolution-api:8080',
+      'http://localhost:8085',
       'http://host.docker.internal:8085',
       'http://172.17.0.1:8085',
-      'http://2.24.65.127:8085'
     ];
 
     let lastError: any = null;
-    let data: any = null;
-    let success = false;
+    let actualResponse: Response | null = null;
 
     for (const baseUrl of urlsToTry) {
       try {
@@ -30,32 +30,29 @@ export async function POST(req: Request) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            apikey: EVOLUTION_API_KEY,
+            apikey: EVOLUTION_API_KEY || 'agencia_secret_wa_key_2026',
           },
           body: JSON.stringify({
             number,
-            options: {
-              delay: 1200,
-              presence: 'composing',
-            },
-            textMessage: {
-              text,
-            },
+            options: { delay: 1200, presence: 'composing' },
+            textMessage: { text },
           }),
         });
         
-        if (response.ok) {
-           data = await response.json();
-           success = true;
-           break;
-        }
+        actualResponse = response;
+        break; // Successfully connected to an API instance, regardless of HTTP status
       } catch (e: any) {
         lastError = e;
       }
     }
 
-    if (!success) {
+    if (!actualResponse) {
        return NextResponse.json({ error: lastError?.message || 'Failed to connect to API' }, { status: 500 });
+    }
+
+    const data = await actualResponse.json().catch(() => ({}));
+    if (!actualResponse.ok) {
+       return NextResponse.json({ error: data?.response?.message || data?.message || 'Error from API' }, { status: actualResponse.status });
     }
 
     return NextResponse.json(data);
