@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     for (const baseUrl of urlsToTry) {
       try {
-        const response = await fetch(${baseUrl}/message/sendText/, {
+        const response = await fetch(`${baseUrl}/message/sendText/${instanceName}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
