@@ -44,7 +44,7 @@ export function useAuth() {
         display_label: 'SaaS GHL',
         brand_primary: '#0F172A'
       } as unknown as Account);
-      setRole('super_admin');
+      setRole('admin'); // 'admin' restringe la vista a solo la subcuenta actual (isAgency = false)
       setLoading(false);
       return;
     }
