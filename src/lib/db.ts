@@ -1,15 +1,15 @@
-// Capa de datos del módulo CRM contra el espejo en Supabase.
+// Capa de datos del mÃ³dulo CRM contra el espejo en Supabase.
 // MULTI-TENANT: todas las lecturas/escrituras se scopean por `accountId`
-// (la subcuenta activa) y la autoría/owner por `userId` (users.id del Núcleo).
-// El frontend nunca habla con GHL — eso lo hace el motor de sync en el backend.
+// (la subcuenta activa) y la autorÃ­a/owner por `userId` (users.id del NÃºcleo).
+// El frontend nunca habla con GHL â€” eso lo hace el motor de sync en el backend.
 import { createBrowserSupabaseClient } from './supabase'
 import type { Lead, Note, Message, Conversation, Stage, NoteType, Channel } from '@/types'
 
 type StageRow = { id: string; name: string }
 
-// Las 5 etapas son FIJAS en estructura; lo único editable es su NOMBRE visible.
-// Identificamos cada etapa por su POSICIÓN (clave estable), no por el nombre —
-// así renombrar "Nuevo"→"Prospecto" NO rompe los leads existentes.
+// Las 5 etapas son FIJAS en estructura; lo Ãºnico editable es su NOMBRE visible.
+// Identificamos cada etapa por su POSICIÃ“N (clave estable), no por el nombre â€”
+// asÃ­ renombrar "Nuevo"â†’"Prospecto" NO rompe los leads existentes.
 export const STAGE_KEYS = ['nuevo', 'contactado', 'propuesta', 'cierre', 'perdido'] as const
 
 // Mapas clave<->stage_id de la cuenta activa (se rellenan en loadStages).
@@ -30,28 +30,32 @@ export async function getDefaultPipeline(accountId: string): Promise<string | nu
   return (data?.id as string) ?? null
 }
 
-// Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posición
+// Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posiciÃ³n
 // (ej: { nuevo: 'Prospecto', contactado: 'Contactado', ... }) para que la UI
 // muestre los nombres personalizados de cada subcuenta.
-// En GHL, las etapas vienen dinámicas por Pipeline.
+// En GHL, las etapas vienen dinÃ¡micas por Pipeline.
 export async function loadStages(accountId: string): Promise<Record<string, string>> {
   try {
     const res = await fetch(`/api/ghl/pipelines?locationId=${accountId}`);
-    if (res.ok) {
-      const data = await res.json();
-      const pipelines = data.pipelines || [];
-      if (pipelines.length > 0) {
-        // Por ahora, tomamos el primer pipeline
-        const firstPipeline = pipelines[0];
-        const labels: Record<string, string> = {};
-        (firstPipeline.stages || []).forEach((s: any) => {
-          labels[s.id] = s.name;
-        });
-        return labels;
-      }
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Status ${res.status}: ${errText}`);
     }
-  } catch (err) {
-    console.error('Error fetching GHL pipelines:', err);
+    const data = await res.json();
+    const pipelines = data.pipelines || [];
+    if (pipelines.length > 0) {
+      // Por ahora, tomamos el primer pipeline
+      const firstPipeline = pipelines[0];
+      const labels: Record<string, string> = {};
+      (firstPipeline.stages || []).forEach((s: any) => {
+        labels[s.id] = s.name;
+      });
+      return labels;
+    } else {
+      alert('GHL devolvió 0 pipelines.');
+    }
+  } catch (err: any) {
+    console.error('Error fetching GHL pipelines:', err); alert('Error GHL Pipelines: ' + err.message);
   }
   // Fallback si no hay pipelines
   return { 'default': 'Sin Pipeline' };
@@ -62,30 +66,32 @@ export async function loadStages(accountId: string): Promise<Record<string, stri
 export async function fetchLeads(accountId: string, ownerOnlyId?: string | null): Promise<Lead[]> {
   try {
     const res = await fetch(`/api/ghl/opportunities?locationId=${accountId}`);
-    if (res.ok) {
-      const data = await res.json();
-      const opps = data.opportunities || [];
-      return opps.map((o: any) => ({
-        id: o.id,
-        contactId: o.contactId || o.id,
-        name: o.name || o.contactName || 'Sin Nombre',
-        company: o.companyName || '',
-        phone: o.phone || '',
-        email: o.email || '',
-        stage: o.pipelineStageId || 'default', // ID real de GHL
-        temperature: 'warm',
-        value: o.monetaryValue || 0,
-        score: 0,
-        ownerId: o.assignedTo || '',
-        dueDate: o.updatedAt ? new Date(o.updatedAt).toISOString() : new Date().toISOString(),
-        channels: ['whatsapp'],
-        unread: 0,
-        source: o.source || 'GHL',
-        tags: (o.tags || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
-      }));
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Status ${res.status}: ${errText}`);
     }
-  } catch (err) {
-    console.error('Error fetching GHL opportunities in fetchLeads:', err);
+    const data = await res.json();
+    const opps = data.opportunities || [];
+    if(opps.length===0) alert('GHL devolvió 0 oportunidades.'); return opps.map((o: any) => ({
+      id: o.id,
+      contactId: o.contactId || o.id,
+      name: o.name || o.contactName || 'Sin Nombre',
+      company: o.companyName || '',
+      phone: o.phone || '',
+      email: o.email || '',
+      stage: o.pipelineStageId || 'default', // ID real de GHL
+      temperature: 'warm',
+      value: o.monetaryValue || 0,
+      score: 0,
+      ownerId: o.assignedTo || '',
+      dueDate: o.updatedAt ? new Date(o.updatedAt).toISOString() : new Date().toISOString(),
+      channels: ['whatsapp'],
+      unread: 0,
+      source: o.source || 'GHL',
+      tags: (o.tags || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
+    }));
+  } catch (err: any) {
+    console.error('Error fetching GHL opportunities in fetchLeads:', err); alert('Error GHL Opps: ' + err.message);
   }
   return [];
 }
@@ -154,7 +160,7 @@ export async function fetchConversations(accountId: string, leads: Lead[]): Prom
   return { convos, msgs }
 }
 
-/* ---------- ESCRITURAS (optimistas: la UI ya cambió, esto persiste) ---------- */
+/* ---------- ESCRITURAS (optimistas: la UI ya cambiÃ³, esto persiste) ---------- */
 
 export async function persistLeadPatch(lead: Lead, patch: Partial<Lead>) {
   const supabase = createBrowserSupabaseClient()
@@ -237,3 +243,4 @@ export async function persistMessage(accountId: string, userId: string, lead: Le
       .update({ last_message_at: new Date().toISOString(), last_message_preview: body.slice(0, 60) })
       .eq('id', convo.id)
 }
+
