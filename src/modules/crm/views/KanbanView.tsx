@@ -5,8 +5,6 @@ import { Avatar, ChannelDot } from '@/modules/crm/components/ui'
 import { STAGE_META, TEMP_META, money, dueLabel } from '@/lib/data/mock'
 import type { Lead, Stage } from '@/types'
 
-const STAGES: Stage[] = ['nuevo', 'contactado', 'propuesta', 'cierre', 'perdido']
-
 const URGENCY_DOT: Record<string, string> = {
   hot: 'bg-accent', warm: 'bg-success', cold: 'bg-ink-soft/40', lost: 'bg-danger',
 }
@@ -76,17 +74,17 @@ function LeadCard({ lead, onDragStart }: { lead: Lead; onDragStart: (e: React.Dr
 }
 
 export default function KanbanView() {
-  const { leads, updateLead } = useLeads()
-  const { openNewLead } = useApp()
-  const stageLabels = useApp((s) => s.stageLabels)
+  const { stageLabels } = useApp()
+  const STAGES = Object.keys(stageLabels)
+  const { leads } = useLeads()
+  const moveLead = useLeads((s) => s.moveLead)
+  const openNewLead = useApp((s) => s.openNewLead)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overStage, setOverStage] = useState<Stage | null>(null)
 
   const drop = (stage: Stage) => {
     if (dragId) {
-      const patch: Partial<Lead> = { stage }
-      if (stage === 'perdido') patch.temperature = 'lost'
-      updateLead(dragId, patch)
+      moveLead(dragId, stage)
     }
     setDragId(null); setOverStage(null)
   }
@@ -94,8 +92,8 @@ export default function KanbanView() {
   return (
     <div className="animate-rise flex h-full gap-4 overflow-x-auto p-4 lg:p-6">
       {STAGES.map((stage) => {
-        const meta = STAGE_META[stage]
         const items = leads.filter((l) => l.stage === stage)
+        const label = stageLabels[stage] || stage
         return (
           <div
             key={stage}
@@ -104,9 +102,9 @@ export default function KanbanView() {
             onDrop={() => drop(stage)}
             className={`flex w-64 shrink-0 flex-col rounded-xl transition-colors ${overStage === stage ? 'bg-stage-new-bg/40' : ''}`}
           >
-            <div className={`h-1.5 rounded-full ${meta.bar}`} />
+            <div className="h-1.5 rounded-full bg-primary" />
             <div className="flex items-center justify-between px-1 py-3">
-              <span className="text-xs font-bold tracking-[0.12em] text-ink-soft uppercase">{stageLabels[stage] ?? meta.label}</span>
+              <span className="text-xs font-bold tracking-[0.12em] text-ink-soft uppercase">{label}</span>
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-line-soft text-[11px] font-bold text-ink-soft">{items.length}</span>
             </div>
             <div className="flex-1 space-y-2.5 overflow-y-auto pb-2">
@@ -117,7 +115,8 @@ export default function KanbanView() {
                 onClick={() => openNewLead(stage)}
                 className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-line py-2 text-xs font-semibold text-ink-soft transition-colors hover:border-primary-light hover:text-primary-light"
               >
-                <Plus size={13} /> Agregar lead
+                <Plus size={12} />
+                <span>Nuevo prospecto</span>
               </button>
             </div>
           </div>
