@@ -1,12 +1,29 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { Pool } from 'pg';
 
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID || '6a9913232f626b82e8dc7c55-mtl6uwma';
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET || '1a22238f-42d4-4680-99c9-7f8b013fff7f';
+const DATABASE_URL = process.env.DATABASE_URL;
+
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+});
+
+async function initDb() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ghl_installations (
+        location_id TEXT PRIMARY KEY,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } finally {
+    client.release();
+  }
+}
 
 export async function GET(req: Request) {
   try {
@@ -44,21 +61,27 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Fallo al autenticar con GHL', details: data }, { status: 500 });
     }
 
-    // Guardar tokens en Supabase
     const locationId = data.locationId;
     
-    const { error: dbError } = await supabase
-      .from('ghl_installations')
-      .upsert({
-        location_id: locationId,
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        updated_at: new Date().toISOString()
-      });
+    // Inicializar tabla si no existe
+    await initDb();
 
-    if (dbError) throw dbError;
+    // Guardar tokens en PostgreSQL
+    const client = await pool.connect();
+    try {
+      await client.query(`
+        INSERT INTO ghl_installations (location_id, access_token, refresh_token, updated_at)
+        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+        ON CONFLICT (location_id) DO UPDATE SET
+          access_token = EXCLUDED.access_token,
+          refresh_token = EXCLUDED.refresh_token,
+          updated_at = CURRENT_TIMESTAMP;
+      `, [locationId, data.access_token, data.refresh_token]);
+    } finally {
+      client.release();
+    }
 
-    // Redirigir al usuario al CRM de vuelta con mensaje de éxito
+    // Redirigir al usuario
     return NextResponse.redirect('https://app.crmagentico.online/crm?ghl_connected=true');
 
   } catch (error: any) {
