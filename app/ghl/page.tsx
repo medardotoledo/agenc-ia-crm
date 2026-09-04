@@ -1,19 +1,24 @@
-﻿export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic';
 import { WhatsAppSettings } from '@/modules/settings/components/WhatsAppSettings';
 
-export default function GhlPage({ searchParams }: { searchParams: { location_id?: string } }) {
-  const locationId = searchParams.location_id;
+export default function GhlPage({ searchParams }: { searchParams: any }) {
+  // Intentar leer diferentes variaciones de location_id que GHL podría estar mandando
+  const locationId = searchParams.location_id || searchParams.locationId || searchParams.location;
 
   if (!locationId) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 max-w-md text-center">
-          <h1 className="text-xl font-bold text-gray-800 mb-2">Error de ConexiÃ³n</h1>
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 max-w-lg text-center">
+          <h1 className="text-xl font-bold text-gray-800 mb-2">Modo Depuración</h1>
           <p className="text-gray-600 mb-4">
-            No se detectÃ³ el identificador de la cuenta (location_id). 
+            Parece que la URL no tiene el parámetro esperado. 
+            Esto es lo que GoHighLevel está enviando a la aplicación:
           </p>
+          <pre className="bg-gray-100 p-4 rounded text-left text-xs overflow-auto text-red-600 font-mono mb-4">
+            {JSON.stringify(searchParams, null, 2)}
+          </pre>
           <p className="text-sm text-gray-500">
-            AsegÃºrate de configurar el Custom Menu Link en GoHighLevel exactamente con este parÃ¡metro en la URL:<br/>
+            Asegúrate de que la URL en GoHighLevel termine en:<br/>
             <code className="bg-gray-100 px-2 py-1 rounded mt-2 block break-all">
               ?location_id=&#123;&#123;location.id&#125;&#125;
             </code>
@@ -28,7 +33,7 @@ export default function GhlPage({ searchParams }: { searchParams: { location_id?
       <div className="max-w-3xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">
-            ConexiÃ³n de WhatsApp
+            Conexión de WhatsApp
           </h1>
           <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
             Location: {locationId}
@@ -42,4 +47,3 @@ export default function GhlPage({ searchParams }: { searchParams: { location_id?
     </div>
   );
 }
-
