@@ -57,70 +57,34 @@ export async function loadStages(accountId: string): Promise<Record<string, stri
 // `ownerOnlyId`: si se pasa, solo trae oportunidades de ese dueño
 // (para usuarios con "solo datos asignados"). null/undefined => todas.
 export async function fetchLeads(accountId: string, ownerOnlyId?: string | null): Promise<Lead[]> {
-  const supabase = createBrowserSupabaseClient()
-  let oppQuery = supabase
-    .from('opportunities')
-    .select('id, value, status, temperature, score, owner_id, stage_id, follow_up_at, contacts(id, name, company, phone_e164, email, source)')
-    .eq('account_id', accountId)
-  if (ownerOnlyId) oppQuery = oppQuery.eq('owner_id', ownerOnlyId)
-
-  const [opps, convos] = await Promise.all([
-    oppQuery.order('created_at'),
-    supabase.from('conversations').select('id, contact_id, channel, unread_count').eq('account_id', accountId),
-  ])
-  if (opps.error) throw opps.error
-  if (convos.error) throw convos.error
-
-  const convByContact = new Map<string, { channels: Channel[]; unread: number }>()
-  for (const c of convos.data as { contact_id: string; channel: Channel; unread_count: number }[]) {
-    const e = convByContact.get(c.contact_id) ?? { channels: [], unread: 0 }
-    e.channels.push(c.channel)
-    e.unread += c.unread_count
-    convByContact.set(c.contact_id, e)
-  }
-
-  // Etiquetas por contacto (para pintar chips en el board).
-  const contactIds = (opps.data as unknown as Array<{ contacts: { id: string } }>).map((o) => o.contacts.id)
-  const tagsByContact = new Map<string, { id: string; name: string; color: string }[]>()
-  if (contactIds.length) {
-    const { data: tagRows } = await supabase
-      .from('contact_tags')
-      .select('contact_id, tags(id, name, color)')
-      .eq('account_id', accountId)
-      .in('contact_id', contactIds)
-    for (const r of (tagRows ?? []) as unknown as Array<{ contact_id: string; tags: { id: string; name: string; color: string } | null }>) {
-      if (!r.tags) continue
-      const arr = tagsByContact.get(r.contact_id) ?? []
-      arr.push(r.tags)
-      tagsByContact.set(r.contact_id, arr)
+  try {
+    const res = await fetch(`/api/ghl/contacts?locationId=${accountId}`);
+    if (res.ok) {
+      const data = await res.json();
+      const prospectos = data.prospectos || [];
+      return prospectos.map((c: any) => ({
+        id: c.id,
+        contactId: c.id,
+        name: c.name,
+        company: '',
+        phone: c.phone || '',
+        email: c.email || '',
+        stage: 'nuevo', // Por ahora todos en nuevo, hasta que conectemos Pipelines reales
+        temperature: 'warm',
+        value: 0,
+        score: 0,
+        ownerId: '',
+        dueDate: new Date().toISOString(),
+        channels: ['whatsapp'],
+        unread: 0,
+        source: c.source || 'GHL',
+        tags: (c.tagIds || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
+      }));
     }
+  } catch (err) {
+    console.error('Error fetching GHL contacts in fetchLeads:', err);
   }
-
-  return (opps.data as unknown as Array<{
-    id: string; value: number; temperature: Lead['temperature']; score: number
-    owner_id: string; stage_id: string; follow_up_at: string | null
-    contacts: { id: string; name: string; company: string | null; phone_e164: string | null; email: string | null; source: string | null }
-  }>).map((o) => {
-    const conv = convByContact.get(o.contacts.id)
-    return {
-      id: o.id,
-      contactId: o.contacts.id,
-      name: o.contacts.name,
-      company: o.contacts.company ?? '',
-      phone: o.contacts.phone_e164 ?? '',
-      email: o.contacts.email ?? '',
-      stage: (keyByStageId[o.stage_id] ?? 'nuevo') as Stage,
-      temperature: o.temperature,
-      value: Number(o.value),
-      score: o.score,
-      ownerId: o.owner_id,
-      dueDate: o.follow_up_at?.slice(0, 10) ?? '',
-      channels: conv?.channels ?? [],
-      unread: conv?.unread ?? 0,
-      source: o.contacts.source ?? 'Manual',
-      tags: tagsByContact.get(o.contacts.id) ?? [],
-    }
-  })
+  return [];
 }
 
 const fmtDate = (iso: string) =>
