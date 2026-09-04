@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import type { Section, ViewMode, NoteType, Note, Message, Conversation, Lead, Stage } from '@/types';
 import * as db from '@/lib/db';
 
@@ -9,7 +9,7 @@ type CalendarTab = 'cliente' | 'agente' | 'config';
 // escrituras (notas/mensajes/leads) para scopear correctamente.
 interface CrmCtx {
   accountId: string;
-  userId: string;        // users.id (Núcleo)
+  userId: string;        // users.id (NÃºcleo)
   userName: string;
   pipelineId: string | null;
 }
@@ -23,14 +23,14 @@ interface AppState {
   view: ViewMode;
   selectedLeadId: string | null;
   panelTab: PanelTab;
-  period: 'hoy' | 'semana' | 'mes' | 'año';
+  period: 'hoy' | 'semana' | 'mes' | 'aÃ±o';
   calendarTab: CalendarTab;
   activeConversationId: string;
   sidebarOpen: boolean;
   cloud: boolean;
   me: { id: string; name: string; role: string } | null;
   ctx: CrmCtx | null;
-  /** Nombres personalizados de las 5 etapas (por clave de posición). */
+  /** Nombres personalizados de las 5 etapas (por clave de posiciÃ³n). */
   stageLabels: Record<string, string>;
   newLeadOpen: boolean;
   newLeadStage: Stage | null;
@@ -199,7 +199,7 @@ export const useLeads = create<LeadsState>((set, get) => ({
     };
     set((s) => ({ leads: [...s.leads, full] }));
     if (!ctx || !ctx.pipelineId) {
-      console.warn('[CRM] addLead sin contexto/pipeline — no se persiste');
+      console.warn('[CRM] addLead sin contexto/pipeline â€” no se persiste');
       return;
     }
     db.persistNewLead(ctx.accountId, ctx.userId, ctx.pipelineId, full)
@@ -212,3 +212,4 @@ export const useLeads = create<LeadsState>((set, get) => ({
       .catch((e) => console.warn('persistNewLead:', e.message));
   },
 }));
+
