@@ -1,3 +1,4 @@
+﻿export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { cookies } from 'next/headers';
@@ -47,3 +48,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
