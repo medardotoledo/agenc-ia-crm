@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID || '6a9913232f626b82e8dc7c55-mtl6uwma';
@@ -31,12 +31,12 @@ export async function GET(req: Request) {
     const code = searchParams.get('code');
 
     if (!code) {
-      return NextResponse.json({ error: 'Falta el parámetro code' }, { status: 400 });
+      return NextResponse.json({ error: 'Falta el parÃ¡metro code' }, { status: 400 });
     }
 
     const encodedCredentials = Buffer.from(GHL_CLIENT_ID + ':' + GHL_CLIENT_SECRET).toString('base64');
     
-    // Intercambiar código por tokens
+    // Intercambiar cÃ³digo por tokens
     const tokenResponse = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -61,7 +61,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Fallo al autenticar con GHL', details: data }, { status: 500 });
     }
 
-    const locationId = data.locationId;
+    const locationId = data.locationId || data.companyId; if (!locationId) { throw new Error('No locationId or companyId in response: ' + JSON.stringify(data)); }
     
     // Inicializar tabla si no existe
     await initDb();
@@ -89,3 +89,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
