@@ -23,6 +23,33 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
+    // ----- GHL SSO BYPASS -----
+    const getCookie = (name: string) => {
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      return match ? decodeURIComponent(match[2]) : null;
+    };
+
+    const ghlLocationId = getCookie('ghl_location_id');
+
+    if (ghlLocationId) {
+      console.log('[useAuth] SSO Bypass Activo para Location:', ghlLocationId);
+      setUser({
+        id: 'ghl-sso-user',
+        email: 'agencia@gohighlevel.com',
+        user_metadata: {}
+      } as User);
+      setAccount({
+        id: ghlLocationId,
+        name: 'Cliente GoHighLevel',
+        display_label: 'SaaS GHL',
+        brand_primary: '#0F172A'
+      } as unknown as Account);
+      setRole('super_admin');
+      setLoading(false);
+      return;
+    }
+    // ----- FIN GHL SSO BYPASS -----
+
     // Resuelve el PERFIL del usuario autenticado sobre el Núcleo:
     //   auth.uid() → fila en `users` (rol/permisos + account_id) → `accounts`.
     // Fallback legacy: si aún no hay fila en `users`, usa accounts.user_id.
