@@ -12,9 +12,9 @@ import { createBrowserSupabaseClient } from '@/lib/supabase';
 import { useActiveAccount } from '@/core/account/activeAccount';
 import { CitasView, NewCitaModal } from '@/modules/property-management/components/CitasView';
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // TIPOS
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type LeadStatus = 'new' | 'contacted' | 'qualified' | 'lost';
 type DateRange  = 'all' | 'today' | 'week' | 'month';
 type ViewId     = 'tabla' | 'kanban' | 'excel' | 'citas';
@@ -37,9 +37,9 @@ interface Prospecto {
   tagIds: string[];
 }
 
-// ─────────────────────────────────────────────────────────────
-// CONFIG ESTÁTICA
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// CONFIG ESTÃTICA
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const VIEWS: { id: ViewId; label: string; Icon: LucideIcon }[] = [
   { id: 'tabla',  label: 'Tabla',  Icon: Table2 },
   { id: 'kanban', label: 'Kanban', Icon: LayoutGrid },
@@ -69,9 +69,9 @@ const ALL_STATUSES: LeadStatus[] = ['new', 'contacted', 'qualified', 'lost'];
 
 const TAG_PALETTE = ['#DBEAFE','#D1FAE5','#FEF3C7','#FCE7F3','#EDE9FE','#FFEDD5','#E0F2FE','#F1F5F9'];
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // HELPERS
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function timeAgo(d: string) {
   const diff = Date.now() - new Date(d).getTime();
   const m = Math.floor(diff / 60000);
@@ -97,9 +97,9 @@ function waLink(phone: string, name: string, prop?: string | null) {
   return `https://wa.me/${n}?text=${msg}`;
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // TAG CHIPS (mini display)
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TagChips({ tagIds, tags, max = 2 }: { tagIds: string[]; tags: TagRow[]; max?: number }) {
   const visible = tagIds.slice(0, max);
   const extra = tagIds.length - max;
@@ -122,9 +122,9 @@ function TagChips({ tagIds, tags, max = 2 }: { tagIds: string[]; tags: TagRow[];
   );
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // VISTA: TABLA
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TablaView({ rows, tags, selectedId, onSelect, onStatus, updating, stageLabels }: {
   rows: Prospecto[]; tags: TagRow[]; selectedId: string | null;
   onSelect: (id: string) => void; onStatus: (id: string, s: LeadStatus) => void;
@@ -156,12 +156,12 @@ function TablaView({ rows, tags, selectedId, onSelect, onStatus, updating, stage
                   </div>
                   <div>
                     <div className="font-semibold text-ink leading-tight">{p.name}</div>
-                    <div className="text-xs text-ink-soft">{p.phone ?? p.email ?? '—'}</div>
+                    <div className="text-xs text-ink-soft">{p.phone ?? p.email ?? 'â€”'}</div>
                   </div>
                 </div>
               </td>
               <td className="px-4 py-3 hidden md:table-cell">
-                <span className="line-clamp-1 max-w-[160px] text-xs text-ink-soft">{p.property_title ?? '—'}</span>
+                <span className="line-clamp-1 max-w-[160px] text-xs text-ink-soft">{p.property_title ?? 'â€”'}</span>
               </td>
               <td className="px-4 py-3 hidden xl:table-cell">
                 <TagChips tagIds={p.tagIds} tags={tags} max={2} />
@@ -205,9 +205,9 @@ function TablaView({ rows, tags, selectedId, onSelect, onStatus, updating, stage
   );
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // VISTA: KANBAN
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function KanbanView({ rows, tags, selectedId, onSelect, onStatus, updating, stageLabels }: {
   rows: Prospecto[]; tags: TagRow[]; selectedId: string | null;
   onSelect: (id: string) => void; onStatus: (id: string, s: LeadStatus) => void;
@@ -276,9 +276,9 @@ function KanbanView({ rows, tags, selectedId, onSelect, onStatus, updating, stag
   );
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // VISTA: EXCEL
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ExcelView({ rows, tags, selectedId, onSelect, onStatus, updating, stageLabels }: {
   rows: Prospecto[]; tags: TagRow[]; selectedId: string | null;
   onSelect: (id: string) => void; onStatus: (id: string, s: LeadStatus) => void;
@@ -289,7 +289,7 @@ function ExcelView({ rows, tags, selectedId, onSelect, onStatus, updating, stage
       <table className="w-full text-xs border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-soft">
-            {['Nombre','Teléfono','Email','Propiedad','Etiquetas','Estado','Origen','Fecha'].map((h) => (
+            {['Nombre','TelÃ©fono','Email','Propiedad','Etiquetas','Estado','Origen','Fecha'].map((h) => (
               <th key={h} className="border-b border-r border-line px-3 py-2 text-left font-semibold text-ink-soft whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -304,10 +304,10 @@ function ExcelView({ rows, tags, selectedId, onSelect, onStatus, updating, stage
                   active ? 'bg-primary/5' : i % 2 === 0 ? 'bg-app' : 'bg-soft/50'
                 } hover:bg-primary/5`}>
                 <td className="border-b border-r border-line px-3 py-1.5 font-medium text-ink whitespace-nowrap">{p.name}</td>
-                <td className="border-b border-r border-line px-3 py-1.5 text-ink-soft whitespace-nowrap">{p.phone ?? '—'}</td>
-                <td className="border-b border-r border-line px-3 py-1.5 text-ink-soft whitespace-nowrap">{p.email ?? '—'}</td>
+                <td className="border-b border-r border-line px-3 py-1.5 text-ink-soft whitespace-nowrap">{p.phone ?? 'â€”'}</td>
+                <td className="border-b border-r border-line px-3 py-1.5 text-ink-soft whitespace-nowrap">{p.email ?? 'â€”'}</td>
                 <td className="border-b border-r border-line px-3 py-1.5 text-ink-soft max-w-[180px]">
-                  <span className="line-clamp-1">{p.property_title ?? '—'}</span>
+                  <span className="line-clamp-1">{p.property_title ?? 'â€”'}</span>
                 </td>
                 <td className="border-b border-r border-line px-3 py-1.5">
                   <TagChips tagIds={p.tagIds} tags={tags} max={3} />
@@ -332,9 +332,9 @@ function ExcelView({ rows, tags, selectedId, onSelect, onStatus, updating, stage
 
 // CitasView viene de @/modules/property-management/components/CitasView
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PANEL LATERAL
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ProspectoPanel({ p, tags, onClose, onStatus, onTagToggle, onSchedule, updating, stageLabels }: {
   p: Prospecto; tags: TagRow[];
   onClose: () => void; onStatus: (id: string, s: LeadStatus) => void;
@@ -409,7 +409,7 @@ function ProspectoPanel({ p, tags, onClose, onStatus, onTagToggle, onSchedule, u
         {/* Propiedad */}
         {p.property_title && (
           <div className="px-5 py-4 border-b border-line">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-ink-soft/60 mb-3">Propiedad de interés</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-ink-soft/60 mb-3">Propiedad de interÃ©s</p>
             <a href={`/p/${p.property_slug || p.property_id}`} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-2 rounded-xl border border-line bg-soft p-3 hover:border-primary/30 transition-colors">
               <Building2 size={16} className="shrink-0 text-primary" />
@@ -445,7 +445,7 @@ function ProspectoPanel({ p, tags, onClose, onStatus, onTagToggle, onSchedule, u
           {tagOpen && (
             <div className="mt-2 rounded-xl border border-line bg-soft p-2">
               {available.length === 0 ? (
-                <p className="text-xs text-ink-soft px-1">Todas las etiquetas ya están asignadas</p>
+                <p className="text-xs text-ink-soft px-1">Todas las etiquetas ya estÃ¡n asignadas</p>
               ) : (
                 <div className="flex flex-wrap gap-1">
                   {available.map((t) => (
@@ -493,7 +493,7 @@ function ProspectoPanel({ p, tags, onClose, onStatus, onTagToggle, onSchedule, u
 
         {/* Acciones */}
         <div className="px-5 py-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-soft/60 mb-3">Acciones rápidas</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-soft/60 mb-3">Acciones rÃ¡pidas</p>
           <div className="space-y-2">
             {p.phone && (
               <a href={waLink(p.phone, p.name, p.property_title)} target="_blank" rel="noopener noreferrer"
@@ -508,7 +508,7 @@ function ProspectoPanel({ p, tags, onClose, onStatus, onTagToggle, onSchedule, u
               </a>
             )}
             {p.email && (
-              <a href={`mailto:${p.email}?subject=Información sobre ${p.property_title ?? 'la propiedad'}`}
+              <a href={`mailto:${p.email}?subject=InformaciÃ³n sobre ${p.property_title ?? 'la propiedad'}`}
                 className="flex w-full items-center gap-3 rounded-xl bg-soft px-4 py-3 text-sm font-semibold text-ink hover:bg-line transition-colors border border-line">
                 <Mail size={16} /> Enviar email
               </a>
@@ -524,9 +524,9 @@ function ProspectoPanel({ p, tags, onClose, onStatus, onTagToggle, onSchedule, u
   );
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // MODAL: NUEVO PROSPECTO
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function NewProspectoModal({ accountId, tags, stageLabels, onClose, onCreate }: {
   accountId: string; tags: TagRow[]; stageLabels: Record<LeadStatus, string>;
   onClose: () => void; onCreate: (p: Prospecto) => void;
@@ -619,19 +619,19 @@ function NewProspectoModal({ accountId, tags, stageLabels, onClose, onCreate }: 
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LABEL}>Teléfono / WhatsApp</label>
-              <input value={form.phone} onChange={set('phone')} placeholder="+52…" className={FIELD} />
+              <label className={LABEL}>TelÃ©fono / WhatsApp</label>
+              <input value={form.phone} onChange={set('phone')} placeholder="+52â€¦" className={FIELD} />
             </div>
             <div>
               <label className={LABEL}>Email</label>
-              <input value={form.email} onChange={set('email')} type="email" placeholder="correo@…" className={FIELD} />
+              <input value={form.email} onChange={set('email')} type="email" placeholder="correo@â€¦" className={FIELD} />
             </div>
           </div>
 
           <div>
-            <label className={LABEL}>Propiedad de interés</label>
+            <label className={LABEL}>Propiedad de interÃ©s</label>
             <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} className={FIELD}>
-              <option value="">— Sin propiedad —</option>
+              <option value="">â€” Sin propiedad â€”</option>
               {properties.map((prop) => (
                 <option key={prop.id} value={prop.id}>{prop.title}</option>
               ))}
@@ -641,7 +641,7 @@ function NewProspectoModal({ accountId, tags, stageLabels, onClose, onCreate }: 
           <div>
             <label className={LABEL}>Mensaje / Notas</label>
             <textarea value={form.message} onChange={set('message')} rows={3}
-              placeholder="Mensaje o notas del prospecto…"
+              placeholder="Mensaje o notas del prospectoâ€¦"
               className={`${FIELD} resize-none`} />
           </div>
 
@@ -692,7 +692,7 @@ function NewProspectoModal({ accountId, tags, stageLabels, onClose, onCreate }: 
           </button>
           <button type="submit" disabled={saving || !form.name.trim()}
             className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-inverse hover:bg-primary-light disabled:opacity-40">
-            {saving ? 'Guardando…' : 'Crear prospecto'}
+            {saving ? 'Guardandoâ€¦' : 'Crear prospecto'}
           </button>
         </div>
       </form>
@@ -700,9 +700,9 @@ function NewProspectoModal({ accountId, tags, stageLabels, onClose, onCreate }: 
   );
 }
 
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // MODAL: GESTIONAR ETIQUETAS
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TagManagerModal({ accountId, tags, onClose, onUpdate }: {
   accountId: string; tags: TagRow[];
   onClose: () => void; onUpdate: (tags: TagRow[]) => void;
@@ -743,7 +743,7 @@ function TagManagerModal({ accountId, tags, onClose, onUpdate }: {
         </div>
 
         <div className="px-5 py-4 max-h-[50vh] overflow-y-auto space-y-2">
-          {local.length === 0 && <p className="text-sm text-ink-soft">Sin etiquetas aún.</p>}
+          {local.length === 0 && <p className="text-sm text-ink-soft">Sin etiquetas aÃºn.</p>}
           {local.map((t) => (
             <div key={t.id} className="flex items-center gap-2 rounded-xl border border-line bg-soft px-3 py-2">
               <span className="h-4 w-4 rounded-full shrink-0" style={{ background: t.color }} />
@@ -761,7 +761,7 @@ function TagManagerModal({ accountId, tags, onClose, onUpdate }: {
           <div className="flex items-center gap-2 mb-2">
             <input value={newName} onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && add()}
-              placeholder="Nombre de la etiqueta…"
+              placeholder="Nombre de la etiquetaâ€¦"
               className="flex-1 rounded-lg border border-line bg-app px-3 py-2 text-sm outline-none focus:border-primary/40" />
           </div>
           <div className="flex items-center gap-1.5 mb-3">
@@ -773,7 +773,7 @@ function TagManagerModal({ accountId, tags, onClose, onUpdate }: {
           </div>
           <button onClick={add} disabled={saving || !newName.trim()}
             className="w-full rounded-lg bg-primary py-2 text-sm font-semibold text-inverse hover:bg-primary-light disabled:opacity-40">
-            {saving ? 'Guardando…' : 'Crear etiqueta'}
+            {saving ? 'Guardandoâ€¦' : 'Crear etiqueta'}
           </button>
         </div>
       </div>
@@ -781,9 +781,9 @@ function TagManagerModal({ accountId, tags, onClose, onUpdate }: {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// PÁGINA PRINCIPAL
-// ─────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PÃGINA PRINCIPAL
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function ProspectosPage() {
   const { account } = useActiveAccount();
   const [prospectos, setProspectos] = useState<Prospecto[]>([]);
@@ -811,9 +811,8 @@ export default function ProspectosPage() {
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
 
-    const [leadsRes, tagsRes, ltRes, settingsRes, agentsRes, propsRes] = await Promise.all([
-      supabase.from('leads').select('id,name,email,phone,message,source,status,created_at,updated_at,property_id')
-        .eq('account_id', account.id).order('created_at', { ascending: false }),
+    // 1. Fetch de Supabase para catálogos locales
+    const [tagsRes, ltRes, settingsRes, agentsRes, propsRes] = await Promise.all([
       supabase.from('tags').select('id,name,color').eq('account_id', account.id),
       supabase.from('lead_tags').select('lead_id,tag_id').eq('account_id', account.id),
       supabase.from('account_settings').select('lead_stage_labels').eq('account_id', account.id).maybeSingle(),
@@ -827,20 +826,44 @@ export default function ProspectosPage() {
       setStageLabels({ ...DEFAULT_LABELS, ...(settingsRes.data.lead_stage_labels as Record<LeadStatus, string>) });
     }
 
-    // Tags catálogo
+    // Tags catÃ¡logo
     setTags(tagsRes.data ?? []);
 
-    // Map property_id → { title, slug }
+    // Map property_id â†’ { title, slug }
     const propsMap = new Map((propsRes.data ?? []).map((p: any) => [p.id, p]));
 
-    // Map lead_id → tag_ids
+    // Map lead_id â†’ tag_ids
     const ltMap: Record<string, string[]> = {};
     for (const row of (ltRes.data ?? [])) {
       if (!ltMap[row.lead_id]) ltMap[row.lead_id] = [];
       ltMap[row.lead_id].push(row.tag_id);
     }
 
-    setProspectos((leadsRes.data ?? []).map((r: any) => {
+    // 2. Fetch de GoHighLevel Contacts
+    let ghlContacts: any[] = [];
+    try {
+      const res = await fetch(`/api/ghl/contacts?locationId=${account.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        ghlContacts = data.prospectos || [];
+      }
+    } catch (err) {
+      console.error('Error fetching GHL contacts:', err);
+    }
+
+    // Convertir GHL Tags (strings) a Virtual Tags en el CRM
+    const ghlUniqueTags = Array.from(new Set(ghlContacts.flatMap((c: any) => c.tagIds)));
+    const virtualTags = ghlUniqueTags.map((name: any, i) => ({
+      id: String(name),
+      name: String(name),
+      color: TAG_PALETTE[i % TAG_PALETTE.length]
+    }));
+    
+    // Unir Tags de Supabase con Tags Virtuales de GHL
+    setTags((prev) => [...prev, ...virtualTags]);
+
+    // Asignar los contactos de GHL al estado
+    setProspectos(ghlContacts.map((r: any) => {
       const prop = propsMap.get(r.property_id) as any;
       return {
         ...r,
@@ -904,7 +927,7 @@ export default function ProspectosPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-ink">Prospectos</h1>
-          <p className="mt-0.5 text-xs text-ink-soft">{filtered.length} de {prospectos.length} · del sitio web</p>
+          <p className="mt-0.5 text-xs text-ink-soft">{filtered.length} de {prospectos.length} Â· del sitio web</p>
         </div>
         <div className="flex items-center gap-2">
           {/* View switcher */}
@@ -932,7 +955,7 @@ export default function ProspectosPage() {
       <div className="mb-3 flex flex-wrap items-center gap-2 shrink-0">
         <div className="relative">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-soft" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar…"
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscarâ€¦"
             className="h-7 w-36 rounded-lg border border-line bg-app pl-7 pr-2 text-xs outline-none focus:border-primary/40" />
         </div>
 
@@ -1016,7 +1039,7 @@ export default function ProspectosPage() {
               <Inbox size={40} className="mb-3 text-ink-soft/20" />
               <p className="font-semibold text-ink">Sin prospectos</p>
               <p className="mt-1 text-xs text-ink-soft">
-                {hasFilters ? 'Prueba ajustando los filtros' : 'Cuando alguien llene el formulario de una propiedad, aparecerá aquí.'}
+                {hasFilters ? 'Prueba ajustando los filtros' : 'Cuando alguien llene el formulario de una propiedad, aparecerÃ¡ aquÃ­.'}
               </p>
               {!hasFilters && (
                 <button onClick={() => setShowNew(true)}
@@ -1036,7 +1059,7 @@ export default function ProspectosPage() {
           )}
         </div>
 
-        {/* Panel lateral — animación elástica */}
+        {/* Panel lateral â€” animaciÃ³n elÃ¡stica */}
         <div style={{
           width: panelOpen ? '420px' : '0px',
           flexShrink: 0, overflow: 'hidden',
@@ -1085,3 +1108,4 @@ export default function ProspectosPage() {
     </div>
   );
 }
+
