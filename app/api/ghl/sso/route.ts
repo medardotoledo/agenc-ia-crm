@@ -18,6 +18,10 @@ export async function GET(req: Request) {
     sameSite: 'none' // Crucial para iframes de GoHighLevel
   });
 
-  // Redirigir al panel de settings de whatsapp (o al admin normal)
-  return NextResponse.redirect(new URL('/admin/settings', req.url));
+  // Determinar el host correcto (Coolify usa Traefik como proxy inverso)
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'app.crmagentico.online';
+  const protocol = req.headers.get('x-forwarded-proto') || 'https';
+
+  // Redirigir al panel de settings de whatsapp
+  return NextResponse.redirect(`${protocol}://${host}/admin/settings`);
 }
