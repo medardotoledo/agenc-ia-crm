@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     const senderName = messageData?.pushName || 'WhatsApp Contact';
 
     // 1. Encontrar o crear contacto
-    let { data: contacts } = await supabase.from('contacts').select('id').eq('account_id', accountId).eq('phone_e164', phone);
+    let { data: contacts } = await supabase.from('contacts').select('id, unread_count').eq('account_id', accountId).eq('phone_e164', phone);
 
     let contactId;
     if (contacts && contacts.length > 0) {
@@ -54,16 +54,16 @@ export async function POST(req: Request) {
       if (errC) throw errC;
       contactId = newContact.id;
 
-      const { data: pipeline } = await supabase.from('pipelines').select('id').eq('account_id', accountId).order('is_default', { ascending: false }).limit(1).maybeSingle();
-      const { data: stage } = await supabase.from('stages').select('id').eq('account_id', accountId).order('position').limit(1).maybeSingle();
+      const { data: pipeline } = await supabase.from('pipelines').select('id, unread_count').eq('account_id', accountId).order('is_default', { ascending: false }).limit(1).maybeSingle();
+      const { data: stage } = await supabase.from('stages').select('id, unread_count').eq('account_id', accountId).order('position').limit(1).maybeSingle();
 
       if (pipeline && stage) {
         await supabase.from('opportunities').insert({ account_id: accountId, contact_id: contactId, pipeline_id: pipeline.id, stage_id: stage.id, temperature: 'hot', score: 50 });
       }
     }
 
-    // 2. Encontrar o crear conversación
-    let { data: convo } = await supabase.from('conversations').select('id').eq('account_id', accountId).eq('contact_id', contactId).eq('channel', 'whatsapp').maybeSingle();
+    // 2. Encontrar o crear conversaciÃ³n
+    let { data: convo } = await supabase.from('conversations').select('id, unread_count').eq('account_id', accountId).eq('contact_id', contactId).eq('channel', 'whatsapp').maybeSingle();
 
     if (!convo) {
       const { data: newConvo, error: errCv } = await supabase.from('conversations').insert({ account_id: accountId, contact_id: contactId, channel: 'whatsapp', unread_count: 0 }).select('id').single();
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
     // 3. Insertar mensaje
     await supabase.from('messages').insert({ account_id: accountId, conversation_id: convo.id, direction: 'in', channel: 'whatsapp', sender_type: 'contact', body: textContent });
 
-    // 4. Actualizar conversación local
+    // 4. Actualizar conversaciÃ³n local
     await supabase.from('conversations').update({ last_message_at: new Date().toISOString(), last_message_preview: textContent.slice(0, 60), unread_count: convo.unread_count ? convo.unread_count + 1 : 1 }).eq('id', convo.id);
 
     // 5. Inyeccion a GoHighLevel
