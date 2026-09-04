@@ -1,4 +1,4 @@
-export type Stage = 'nuevo' | 'contactado' | 'propuesta' | 'cierre' | 'perdido'
+export type Stage = string // GHL Stage ID
 export type Temperature = 'hot' | 'warm' | 'cold' | 'lost'
 export type NoteType = 'note' | 'call' | 'whatsapp' | 'email'
 export type Channel = 'whatsapp' | 'facebook' | 'instagram' | 'email'

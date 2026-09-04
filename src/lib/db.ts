@@ -33,56 +33,59 @@ export async function getDefaultPipeline(accountId: string): Promise<string | nu
 // Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posición
 // (ej: { nuevo: 'Prospecto', contactado: 'Contactado', ... }) para que la UI
 // muestre los nombres personalizados de cada subcuenta.
+// En GHL, las etapas vienen dinámicas por Pipeline.
 export async function loadStages(accountId: string): Promise<Record<string, string>> {
-  const supabase = createBrowserSupabaseClient()
-  const { data, error } = await supabase
-    .from('stages')
-    .select('id,name')
-    .eq('account_id', accountId)
-    .order('position')
-  if (error) throw error
-  stageIdByKey = {}; keyByStageId = {}
-  const labels: Record<string, string> = {}
-  ;(data as StageRow[]).forEach((s, i) => {
-    const key = STAGE_KEYS[i] ?? s.name.toLowerCase()
-    stageIdByKey[key] = s.id
-    keyByStageId[s.id] = key
-    labels[key] = s.name
-  })
-  return labels
-}
-
-/* ---------- LECTURAS (scopeadas por cuenta) ---------- */
-
-// `ownerOnlyId`: si se pasa, solo trae oportunidades de ese dueño
-// (para usuarios con "solo datos asignados"). null/undefined => todas.
-export async function fetchLeads(accountId: string, ownerOnlyId?: string | null): Promise<Lead[]> {
   try {
-    const res = await fetch(`/api/ghl/contacts?locationId=${accountId}`);
+    const res = await fetch(`/api/ghl/pipelines?locationId=${accountId}`);
     if (res.ok) {
       const data = await res.json();
-      const prospectos = data.prospectos || [];
-      return prospectos.map((c: any) => ({
-        id: c.id,
-        contactId: c.id,
-        name: c.name,
-        company: '',
-        phone: c.phone || '',
-        email: c.email || '',
-        stage: 'nuevo', // Por ahora todos en nuevo, hasta que conectemos Pipelines reales
+      const pipelines = data.pipelines || [];
+      if (pipelines.length > 0) {
+        // Por ahora, tomamos el primer pipeline
+        const firstPipeline = pipelines[0];
+        const labels: Record<string, string> = {};
+        (firstPipeline.stages || []).forEach((s: any) => {
+          labels[s.id] = s.name;
+        });
+        return labels;
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching GHL pipelines:', err);
+  }
+  // Fallback si no hay pipelines
+  return { 'default': 'Sin Pipeline' };
+}
+
+/* ---------- LECTURAS ---------- */
+
+export async function fetchLeads(accountId: string, ownerOnlyId?: string | null): Promise<Lead[]> {
+  try {
+    const res = await fetch(`/api/ghl/opportunities?locationId=${accountId}`);
+    if (res.ok) {
+      const data = await res.json();
+      const opps = data.opportunities || [];
+      return opps.map((o: any) => ({
+        id: o.id,
+        contactId: o.contactId || o.id,
+        name: o.name || o.contactName || 'Sin Nombre',
+        company: o.companyName || '',
+        phone: o.phone || '',
+        email: o.email || '',
+        stage: o.pipelineStageId || 'default', // ID real de GHL
         temperature: 'warm',
-        value: 0,
+        value: o.monetaryValue || 0,
         score: 0,
-        ownerId: '',
-        dueDate: new Date().toISOString(),
+        ownerId: o.assignedTo || '',
+        dueDate: o.updatedAt ? new Date(o.updatedAt).toISOString() : new Date().toISOString(),
         channels: ['whatsapp'],
         unread: 0,
-        source: c.source || 'GHL',
-        tags: (c.tagIds || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
+        source: o.source || 'GHL',
+        tags: (o.tags || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
       }));
     }
   } catch (err) {
-    console.error('Error fetching GHL contacts in fetchLeads:', err);
+    console.error('Error fetching GHL opportunities in fetchLeads:', err);
   }
   return [];
 }
