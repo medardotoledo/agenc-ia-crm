@@ -76,15 +76,14 @@ function LeadCard({ lead, onDragStart }: { lead: Lead; onDragStart: (e: React.Dr
 export default function KanbanView() {
   const { stageLabels } = useApp()
   const STAGES = Object.keys(stageLabels)
-  const { leads } = useLeads()
-  const moveLead = useLeads((s) => s.moveLead)
+  const { leads, updateLead } = useLeads()
   const openNewLead = useApp((s) => s.openNewLead)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overStage, setOverStage] = useState<Stage | null>(null)
 
   const drop = (stage: Stage) => {
     if (dragId) {
-      moveLead(dragId, stage)
+      updateLead(dragId, { stage })
     }
     setDragId(null); setOverStage(null)
   }
