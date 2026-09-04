@@ -1,9 +1,12 @@
 export const dynamic = 'force-dynamic';
 import { WhatsAppSettings } from '@/modules/settings/components/WhatsAppSettings';
 
-export default function GhlPage({ searchParams }: { searchParams: any }) {
-  // Intentar leer diferentes variaciones de location_id que GHL podría estar mandando
-  const locationId = searchParams.location_id || searchParams.locationId || searchParams.location;
+export default async function GhlPage({ searchParams }: { searchParams: Promise<any> }) {
+  // En Next.js 15+, searchParams es una promesa que debe resolverse
+  const resolvedParams = await searchParams;
+  
+  // Intentar leer diferentes variaciones de location_id
+  const locationId = resolvedParams.location_id || resolvedParams.locationId || resolvedParams.location;
 
   if (!locationId) {
     return (
@@ -15,7 +18,7 @@ export default function GhlPage({ searchParams }: { searchParams: any }) {
             Esto es lo que GoHighLevel está enviando a la aplicación:
           </p>
           <pre className="bg-gray-100 p-4 rounded text-left text-xs overflow-auto text-red-600 font-mono mb-4">
-            {JSON.stringify(searchParams, null, 2)}
+            {JSON.stringify(resolvedParams, null, 2)}
           </pre>
           <p className="text-sm text-gray-500">
             Asegúrate de que la URL en GoHighLevel termine en:<br/>
