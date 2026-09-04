@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     const senderName = messageData?.pushName || 'WhatsApp Contact';
 
     // 1. Encontrar o crear contacto
-    let { data: contacts } = await supabase.from('contacts').select('id, unread_count').eq('account_id', accountId).eq('phone_e164', phone);
+    let { data: contacts } = await supabase.from('contacts').select('id').eq('account_id', accountId).eq('phone_e164', phone);
 
     let contactId;
     if (contacts && contacts.length > 0) {
@@ -54,8 +54,8 @@ export async function POST(req: Request) {
       if (errC) throw errC;
       contactId = newContact.id;
 
-      const { data: pipeline } = await supabase.from('pipelines').select('id, unread_count').eq('account_id', accountId).order('is_default', { ascending: false }).limit(1).maybeSingle();
-      const { data: stage } = await supabase.from('stages').select('id, unread_count').eq('account_id', accountId).order('position').limit(1).maybeSingle();
+      const { data: pipeline } = await supabase.from('pipelines').select('id').eq('account_id', accountId).order('is_default', { ascending: false }).limit(1).maybeSingle();
+      const { data: stage } = await supabase.from('stages').select('id').eq('account_id', accountId).order('position').limit(1).maybeSingle();
 
       if (pipeline && stage) {
         await supabase.from('opportunities').insert({ account_id: accountId, contact_id: contactId, pipeline_id: pipeline.id, stage_id: stage.id, temperature: 'hot', score: 50 });
@@ -109,3 +109,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
