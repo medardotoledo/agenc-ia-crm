@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { createBrowserSupabaseClient } from '@/lib/supabase';
@@ -145,11 +145,11 @@ export function useAuth() {
 
       if (data.user) {
         // Create account (esquema real: name, subdomain, plan, timezone)
-        const subdomain = agencyName
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[Ì€-Í¯]/g, '')
-          .replace(/[^a-z0-9]+/g, '-')
+          const subdomain = agencyName
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-+|-+$/g, '')
           .slice(0, 40);
 
@@ -216,4 +216,5 @@ export function useAuth() {
     isAuthenticated: !!user,
   };
 }
+
 
