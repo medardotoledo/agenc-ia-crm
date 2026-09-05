@@ -22,43 +22,63 @@ export function TagEditor({ lead }: { lead: Lead }) {
   const current = lead.tags ?? [];
 
   useEffect(() => {
-    if (account) tagsService.list(account.id).then(setCatalog).catch(() => {});
+    if (account) {
+      fetch(`/api/ghl/tags?locationId=${account.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.tags && Array.isArray(data.tags)) {
+            setCatalog(data.tags.map((t: any) => ({ id: t.id, name: t.name, color: t.color || '#E2E8F0' })));
+          }
+        })
+        .catch(() => {});
+    }
   }, [account?.id]);
 
   if (!account || !lead.contactId) return null;
 
   const add = async (tag: Tag) => {
-    if (current.some((t) => t.id === tag.id)) return;
+    if (current.some((t) => t.id === tag.id || t.name === tag.name)) return;
     setLeadTags(lead.id, [...current, tag]);
     setOpen(false);
     try {
-      await tagsService.addToContact(account.id, lead.contactId!, tag);
+      await fetch('/api/ghl/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locationId: account.id,
+          contactId: lead.contactId,
+          tags: [tag.name],
+        }),
+      });
     } catch (e) {
-      console.warn('addTag:', (e as Error).message);
+      console.warn('addTag to GHL:', (e as Error).message);
     }
   };
 
   const remove = async (tag: Tag) => {
-    setLeadTags(lead.id, current.filter((t) => t.id !== tag.id));
+    setLeadTags(lead.id, current.filter((t) => t.id !== tag.id && t.name !== tag.name));
     try {
-      await tagsService.removeFromContact(account.id, lead.contactId!, tag);
+      await fetch('/api/ghl/tags', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locationId: account.id,
+          contactId: lead.contactId,
+          tags: [tag.name],
+        }),
+      });
     } catch (e) {
-      console.warn('removeTag:', (e as Error).message);
+      console.warn('removeTag from GHL:', (e as Error).message);
     }
   };
 
   const createAndAdd = async () => {
     const name = newName.trim();
     if (!name) return;
-    try {
-      const existing = catalog.find((t) => t.name.toLowerCase() === name.toLowerCase());
-      const tag = existing ?? (await tagsService.create(account.id, name));
-      if (!existing) setCatalog((c) => [...c, tag]);
-      setNewName('');
-      await add(tag);
-    } catch (e) {
-      console.warn('createTag:', (e as Error).message);
-    }
+    const tag: Tag = { id: 'tag_' + Date.now(), name, color: '#E2E8F0' };
+    setCatalog((c) => [...c, tag]);
+    setNewName('');
+    await add(tag);
   };
 
   const available = catalog.filter((t) => !current.some((c) => c.id === t.id));
