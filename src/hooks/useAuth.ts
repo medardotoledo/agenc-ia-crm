@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { createBrowserSupabaseClient } from '@/lib/supabase';
@@ -12,7 +12,7 @@ export function useAuth() {
   const [role, setRole] = useState<UserRole | null>(null);
   const [permissions, setPermissions] = useState<Record<string, unknown>>({});
   const [onlyAssignedData, setOnlyAssignedData] = useState(false);
-  // id y nombre de la fila en `users` (Núcleo) — para owner_id / autoría en módulos.
+  // id y nombre de la fila en `users` (NÃºcleo) â€” para owner_id / autorÃ­a en mÃ³dulos.
   const [userRowId, setUserRowId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,7 +29,7 @@ export function useAuth() {
       return match ? decodeURIComponent(match[2]) : null;
     };
 
-    const ghlLocationId = getCookie('ghl_location_id');
+    const searchParams = new URLSearchParams(window.location.search); const ghlLocationId = searchParams.get('location_id') || searchParams.get('locationId') || searchParams.get('location') || getCookie('ghl_location_id');
 
     if (ghlLocationId) {
       console.log('[useAuth] SSO Bypass Activo para Location:', ghlLocationId);
@@ -50,13 +50,13 @@ export function useAuth() {
     }
     // ----- FIN GHL SSO BYPASS -----
 
-    // Resuelve el PERFIL del usuario autenticado sobre el Núcleo:
-    //   auth.uid() → fila en `users` (rol/permisos + account_id) → `accounts`.
-    // Fallback legacy: si aún no hay fila en `users`, usa accounts.user_id.
+    // Resuelve el PERFIL del usuario autenticado sobre el NÃºcleo:
+    //   auth.uid() â†’ fila en `users` (rol/permisos + account_id) â†’ `accounts`.
+    // Fallback legacy: si aÃºn no hay fila en `users`, usa accounts.user_id.
     // El `account` DEBE quedar poblado antes de apagar `loading` (los guards
     // de /admin redirigen a login si falta).
     async function loadProfile(authUserId: string) {
-      // 1) Fila en users (Núcleo): rol, permisos y subcuenta.
+      // 1) Fila en users (NÃºcleo): rol, permisos y subcuenta.
       const { data: u } = await supabase
         .from('users')
         .select('id, name, account_id, role, permissions, only_assigned_data')
@@ -67,7 +67,7 @@ export function useAuth() {
 
       let accountId = (u?.account_id as string | undefined) ?? undefined;
 
-      // 2) Fallback legacy por accounts.user_id (usuarios sin fila en users aún).
+      // 2) Fallback legacy por accounts.user_id (usuarios sin fila en users aÃºn).
       if (!accountId) {
         const { data: a } = await supabase
           .from('accounts')
@@ -99,8 +99,8 @@ export function useAuth() {
       setLoading(false);
     }
 
-    // ÚNICO listener: onAuthStateChange
-    // Supabase automáticamente lee del localStorage al iniciar
+    // ÃšNICO listener: onAuthStateChange
+    // Supabase automÃ¡ticamente lee del localStorage al iniciar
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!mounted) return;
@@ -148,7 +148,7 @@ export function useAuth() {
         const subdomain = agencyName
           .toLowerCase()
           .normalize('NFD')
-          .replace(/[̀-ͯ]/g, '')
+          .replace(/[Ì€-Í¯]/g, '')
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-+|-+$/g, '')
           .slice(0, 40);
@@ -216,3 +216,4 @@ export function useAuth() {
     isAuthenticated: !!user,
   };
 }
+

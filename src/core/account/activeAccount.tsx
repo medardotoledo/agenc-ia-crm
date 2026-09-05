@@ -1,16 +1,16 @@
-'use client';
+﻿'use client';
 
 /**
- * ════════════════════════════════════════════════════════════════
- * NÚCLEO · CUENTA ACTIVA (selector de subcuenta, estilo GHL)
- * ════════════════════════════════════════════════════════════════
- * El dueño de Agencia (super_admin) administra varias SUBCUENTAS. Este
- * contexto resuelve en qué subcuenta está operando ahora ("cuenta activa")
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ * NÃšCLEO Â· CUENTA ACTIVA (selector de subcuenta, estilo GHL)
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+ * El dueÃ±o de Agencia (super_admin) administra varias SUBCUENTAS. Este
+ * contexto resuelve en quÃ© subcuenta estÃ¡ operando ahora ("cuenta activa")
  * y permite cambiarla. Para un usuario normal, la cuenta activa es la suya.
  *
- * Las páginas de /admin deben usar `useActiveAccount().account` en lugar de
+ * Las pÃ¡ginas de /admin deben usar `useActiveAccount().account` en lugar de
  * `useAuth().account` para que respeten la subcuenta seleccionada.
- * ════════════════════════════════════════════════════════════════
+ * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
  */
 
 import { createContext, useContext, useEffect, useState } from 'react';
@@ -19,13 +19,13 @@ import { useAuth } from '@/hooks/useAuth';
 import type { Account } from '@/types/database';
 
 interface ActiveAccountValue {
-  /** Cuenta en la que se está operando (subcuenta seleccionada). */
+  /** Cuenta en la que se estÃ¡ operando (subcuenta seleccionada). */
   account: Account | null;
-  /** Cuenta "hogar" del usuario (la suya; para el dueño de agencia, la Agencia). */
+  /** Cuenta "hogar" del usuario (la suya; para el dueÃ±o de agencia, la Agencia). */
   homeAccount: Account | null;
-  /** Subcuentas entre las que puede cambiar (para el dueño de agencia). */
+  /** Subcuentas entre las que puede cambiar (para el dueÃ±o de agencia). */
   accounts: Account[];
-  /** ¿El usuario es dueño de Agencia (ve varias subcuentas)? */
+  /** Â¿El usuario es dueÃ±o de Agencia (ve varias subcuentas)? */
   isAgency: boolean;
   setActiveAccount: (id: string) => void;
   loading: boolean;
@@ -53,22 +53,17 @@ export function ActiveAccountProvider({ children }: { children: React.ReactNode 
     (async () => {
       let list: Account[] = [homeAccount];
 
-      // Dueño de agencia: puede operar dentro de sus subcuentas (hijas).
+      // DueÃ±o de agencia: puede operar dentro de sus subcuentas (hijas).
       if (isAgency) {
-        const { data } = await supabase
-          .from('accounts')
-          .select('*')
-          .eq('parent_account_id', homeAccount.id)
-          .order('name', { ascending: true });
-        if (data && data.length > 0) list = data as unknown as Account[];
+        list = [homeAccount];
       }
 
       if (!mounted) return;
       setAccounts(list);
 
-      // Selección persistida por usuario, o la primera disponible.
+      // SelecciÃ³n persistida por usuario, o la primera disponible.
       const storeKey = `active_account_${user?.id ?? 'anon'}`;
-      const saved = typeof window !== 'undefined' ? localStorage.getItem(storeKey) : null;
+      const saved = typeof window !== 'undefined' ? (function(){try{return localStorage.getItem(storeKey)}catch(e){return null}})() : null;
       const valid = saved && list.some((a) => a.id === saved) ? saved : list[0]?.id ?? null;
       setActiveId(valid);
       setLoading(false);
@@ -111,3 +106,5 @@ export function useActiveAccount(): ActiveAccountValue {
   }
   return v;
 }
+
+
