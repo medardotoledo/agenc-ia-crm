@@ -65,9 +65,9 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
       id: o.id,
       contactId: o.contactId || o.id,
       name: o.name || o.contactName || 'Sin Nombre',
-      company: o.companyName || '',
-      phone: o.phone || '',
-      email: o.email || '',
+      company: o.contact?.companyName || o.companyName || '',
+      phone: o.contact?.phone || o.phone || '',
+      email: o.contact?.email || o.email || '',
       stage: o.pipelineStageId || 'default', // ID real de GHL
       temperature: 'warm',
       value: o.monetaryValue || 0,
@@ -177,6 +177,7 @@ export async function persistMessage(accountId: string, userId: string, lead: Le
       .update({ last_message_at: new Date().toISOString(), last_message_preview: body.slice(0, 60) })
       .eq('id', convo.id)
 }
+
 
 
 
