@@ -36,7 +36,7 @@ export function createBrowserSupabaseClient() {
       auth: {
         persistSession: true,
         detectSessionInUrl: true,
-        storage: (function() { try { return typeof window !== 'undefined' ? window.localStorage : undefined; } catch(e) { return undefined; } })(),
+        storage: (function() { try { if (typeof window !== 'undefined' && window.localStorage) { window.localStorage.getItem('test'); return window.localStorage; } } catch(e) {} return { getItem: () => null, setItem: () => {}, removeItem: () => {} }; })(),
         autoRefreshToken: true,
       },
     });
@@ -163,4 +163,5 @@ export async function getLeadsByAccount(
   if (error) throw error;
   return data;
 }
+
 
