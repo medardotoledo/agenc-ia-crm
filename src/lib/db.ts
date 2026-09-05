@@ -1,15 +1,15 @@
-// Capa de datos del mÃ³dulo CRM contra el espejo en Supabase.
+﻿// Capa de datos del mÃƒÂ³dulo CRM contra el espejo en Supabase.
 // MULTI-TENANT: todas las lecturas/escrituras se scopean por `accountId`
-// (la subcuenta activa) y la autorÃ­a/owner por `userId` (users.id del NÃºcleo).
-// El frontend nunca habla con GHL â€” eso lo hace el motor de sync en el backend.
+// (la subcuenta activa) y la autorÃƒÂ­a/owner por `userId` (users.id del NÃƒÂºcleo).
+// El frontend nunca habla con GHL Ã¢â‚¬â€ eso lo hace el motor de sync en el backend.
 import { createBrowserSupabaseClient } from './supabase'
 import type { Lead, Note, Message, Conversation, Stage, NoteType, Channel } from '@/types'
 
 type StageRow = { id: string; name: string }
 
-// Las 5 etapas son FIJAS en estructura; lo Ãºnico editable es su NOMBRE visible.
-// Identificamos cada etapa por su POSICIÃ“N (clave estable), no por el nombre â€”
-// asÃ­ renombrar "Nuevo"â†’"Prospecto" NO rompe los leads existentes.
+// Las 5 etapas son FIJAS en estructura; lo ÃƒÂºnico editable es su NOMBRE visible.
+// Identificamos cada etapa por su POSICIÃƒâ€œN (clave estable), no por el nombre Ã¢â‚¬â€
+// asÃƒÂ­ renombrar "Nuevo"Ã¢â€ â€™"Prospecto" NO rompe los leads existentes.
 export const STAGE_KEYS = ['nuevo', 'contactado', 'propuesta', 'cierre', 'perdido'] as const
 
 // Mapas clave<->stage_id de la cuenta activa (se rellenan en loadStages).
@@ -17,23 +17,12 @@ let stageIdByKey: Record<string, string> = {}
 let keyByStageId: Record<string, string> = {}
 
 /** Pipeline por defecto de la cuenta (is_default, o el primero). */
-export async function getDefaultPipeline(accountId: string): Promise<string | null> {
-  const supabase = createBrowserSupabaseClient()
-  const { data, error } = await supabase
-    .from('pipelines')
-    .select('id, is_default')
-    .eq('account_id', accountId)
-    .order('is_default', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) throw error
-  return (data?.id as string) ?? null
-}
+export async function getDefaultPipeline(accountId: string): Promise<string | null> { return null; }
 
-// Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posiciÃ³n
+// Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posiciÃƒÂ³n
 // (ej: { nuevo: 'Prospecto', contactado: 'Contactado', ... }) para que la UI
 // muestre los nombres personalizados de cada subcuenta.
-// En GHL, las etapas vienen dinÃ¡micas por Pipeline.
+// En GHL, las etapas vienen dinÃƒÂ¡micas por Pipeline.
 export async function loadStages(accountId: string): Promise<Record<string, string>> {
   try {
     const res = await fetch(`/api/ghl/pipelines?locationId=${accountId}`);
@@ -52,7 +41,7 @@ export async function loadStages(accountId: string): Promise<Record<string, stri
       });
       return labels;
     } else {
-      alert('GHL devolvió 0 pipelines.');
+      alert('GHL devolviÃ³ 0 pipelines.');
     }
   } catch (err: any) {
     console.error('Error fetching GHL pipelines:', err); alert('Error GHL Pipelines: ' + err.message);
@@ -72,7 +61,7 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
     }
     const data = await res.json();
     const opps = data.opportunities || [];
-    if(opps.length===0) alert('GHL devolvió 0 oportunidades.'); return opps.map((o: any) => ({
+    if(opps.length===0) alert('GHL devolviÃ³ 0 oportunidades.'); return opps.map((o: any) => ({
       id: o.id,
       contactId: o.contactId || o.id,
       name: o.name || o.contactName || 'Sin Nombre',
@@ -160,7 +149,7 @@ export async function fetchConversations(accountId: string, leads: Lead[]): Prom
   return { convos, msgs }
 }
 
-/* ---------- ESCRITURAS (optimistas: la UI ya cambiÃ³, esto persiste) ---------- */
+/* ---------- ESCRITURAS (optimistas: la UI ya cambiÃƒÂ³, esto persiste) ---------- */
 
 export async function persistLeadPatch(lead: Lead, patch: Partial<Lead>) {
   const supabase = createBrowserSupabaseClient()
@@ -243,4 +232,6 @@ export async function persistMessage(accountId: string, userId: string, lead: Le
       .update({ last_message_at: new Date().toISOString(), last_message_preview: body.slice(0, 60) })
       .eq('id', convo.id)
 }
+
+
 
