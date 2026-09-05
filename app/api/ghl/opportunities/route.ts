@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+﻿export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Falta locationId' }, { status: 400 });
     }
 
-    const accessToken = process.env.GHL_API_TOKEN || 'pit-4c695ac5-0267-4c48-972a-2c6847aadad3';
+    const accessToken = process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966';
 
     // GHL Search Opportunities API (can filter by pipelineId)
     const url = `https://services.leadconnectorhq.com/opportunities/search?location_id=${locationId}${pipelineId ? `&pipeline_id=${pipelineId}` : ''}&limit=100`;
@@ -40,5 +40,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 
 
