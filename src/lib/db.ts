@@ -1,15 +1,15 @@
-﻿// Capa de datos del mÃƒÂ³dulo CRM contra el espejo en Supabase.
+﻿// Capa de datos del mÃƒÆ’Ã‚Â³dulo CRM contra el espejo en Supabase.
 // MULTI-TENANT: todas las lecturas/escrituras se scopean por `accountId`
-// (la subcuenta activa) y la autorÃƒÂ­a/owner por `userId` (users.id del NÃƒÂºcleo).
-// El frontend nunca habla con GHL Ã¢â‚¬â€ eso lo hace el motor de sync en el backend.
+// (la subcuenta activa) y la autorÃƒÆ’Ã‚Â­a/owner por `userId` (users.id del NÃƒÆ’Ã‚Âºcleo).
+// El frontend nunca habla con GHL ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â eso lo hace el motor de sync en el backend.
 import { createBrowserSupabaseClient } from './supabase'
 import type { Lead, Note, Message, Conversation, Stage, NoteType, Channel } from '@/types'
 
 type StageRow = { id: string; name: string }
 
-// Las 5 etapas son FIJAS en estructura; lo ÃƒÂºnico editable es su NOMBRE visible.
-// Identificamos cada etapa por su POSICIÃƒâ€œN (clave estable), no por el nombre Ã¢â‚¬â€
-// asÃƒÂ­ renombrar "Nuevo"Ã¢â€ â€™"Prospecto" NO rompe los leads existentes.
+// Las 5 etapas son FIJAS en estructura; lo ÃƒÆ’Ã‚Âºnico editable es su NOMBRE visible.
+// Identificamos cada etapa por su POSICIÃƒÆ’Ã¢â‚¬Å“N (clave estable), no por el nombre ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
+// asÃƒÆ’Ã‚Â­ renombrar "Nuevo"ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢"Prospecto" NO rompe los leads existentes.
 export const STAGE_KEYS = ['nuevo', 'contactado', 'propuesta', 'cierre', 'perdido'] as const
 
 // Mapas clave<->stage_id de la cuenta activa (se rellenan en loadStages).
@@ -19,10 +19,10 @@ let keyByStageId: Record<string, string> = {}
 /** Pipeline por defecto de la cuenta (is_default, o el primero). */
 export async function getDefaultPipeline(accountId: string): Promise<string | null> { return 'ghl-pipeline'; }
 
-// Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posiciÃƒÂ³n
+// Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posiciÃƒÆ’Ã‚Â³n
 // (ej: { nuevo: 'Prospecto', contactado: 'Contactado', ... }) para que la UI
 // muestre los nombres personalizados de cada subcuenta.
-// En GHL, las etapas vienen dinÃƒÂ¡micas por Pipeline.
+// En GHL, las etapas vienen dinÃƒÆ’Ã‚Â¡micas por Pipeline.
 export async function loadStages(accountId: string): Promise<Record<string, string>> {
   try {
     const res = await fetch(`/api/ghl/pipelines?locationId=${accountId}`);
@@ -41,7 +41,7 @@ export async function loadStages(accountId: string): Promise<Record<string, stri
       });
       return labels;
     } else {
-      alert('GHL devolviÃ³ 0 pipelines.');
+      alert('GHL devolviÃƒÂ³ 0 pipelines.');
     }
   } catch (err: any) {
     console.error('Error fetching GHL pipelines:', err); alert('Error GHL Pipelines: ' + err.message);
@@ -61,7 +61,7 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
     }
     const data = await res.json();
     const opps = data.opportunities || [];
-    if(opps.length===0) alert('GHL devolviÃ³ 0 oportunidades.'); return opps.map((o: any) => ({
+    if(opps.length===0) alert('GHL devolviÃƒÂ³ 0 oportunidades.'); return opps.map((o: any) => ({
       id: o.id,
       contactId: o.contactId || o.id,
       name: o.name || o.contactName || 'Sin Nombre',
@@ -89,67 +89,12 @@ const fmtDate = (iso: string) =>
   new Date(iso).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 export async function fetchNotes(accountId: string, leads: Lead[]): Promise<Note[]> {
-  const supabase = createBrowserSupabaseClient()
-  const { data, error } = await supabase
-    .from('notes')
-    .select('id, contact_id, note_type, content, created_at, users(name)')
-    .eq('account_id', accountId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  const leadByContact = new Map(leads.map((l) => [l.contactId, l.id]))
-  return (data as unknown as Array<{ id: string; contact_id: string; note_type: NoteType; content: string; created_at: string; users: { name: string } | null }>)
-    .filter((n) => leadByContact.has(n.contact_id))
-    .map((n) => ({
-      id: n.id,
-      leadId: leadByContact.get(n.contact_id)!,
-      type: n.note_type,
-      content: n.content,
-      author: n.users?.name ?? 'Sistema',
-      createdAt: fmtDate(n.created_at),
-    }))
+  return [];
 }
 
-export async function fetchConversations(accountId: string, leads: Lead[]): Promise<{ convos: Conversation[]; msgs: Message[] }> {
-  const supabase = createBrowserSupabaseClient()
-  const [cv, ms] = await Promise.all([
-    supabase.from('conversations').select('id, contact_id, channel, unread_count, last_message_at, last_message_preview').eq('account_id', accountId).order('last_message_at', { ascending: false }),
-    supabase.from('messages').select('id, conversation_id, direction, channel, body, created_at, users(name)').eq('account_id', accountId).order('created_at'),
-  ])
-  if (cv.error) throw cv.error
-  if (ms.error) throw ms.error
-  const leadByContact = new Map(leads.map((l) => [l.contactId, l.id]))
-  const leadByConvo = new Map<string, string>()
+export async function fetchConversations(accountId: string, leads: Lead[]): Promise<{ convos: Conversation[]; msgs: Message[] }> { return { convos: [], msgs: [] }; }
 
-  const convos: Conversation[] = []
-  for (const c of cv.data as Array<{ id: string; contact_id: string; channel: Channel; unread_count: number; last_message_at: string | null; last_message_preview: string | null }>) {
-    const leadId = leadByContact.get(c.contact_id)
-    if (!leadId) continue
-    leadByConvo.set(c.id, leadId)
-    convos.push({
-      leadId,
-      channel: c.channel,
-      preview: c.last_message_preview ?? '',
-      time: c.last_message_at ? new Date(c.last_message_at).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' }) : '',
-      unread: c.unread_count,
-    })
-  }
-
-  const msgs: Message[] = (ms.data as unknown as Array<{ id: string; conversation_id: string; direction: 'in' | 'out'; channel: Message['channel']; body: string; created_at: string; users: { name: string } | null }>)
-    .filter((m) => leadByConvo.has(m.conversation_id))
-    .map((m) => ({
-      id: m.id,
-      leadId: leadByConvo.get(m.conversation_id)!,
-      channel: m.channel,
-      direction: m.direction,
-      body: m.body,
-      author: m.users?.name ?? undefined,
-      time: new Date(m.created_at).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' }),
-    }))
-
-  return { convos, msgs }
-}
-
-/* ---------- ESCRITURAS (optimistas: la UI ya cambiÃƒÂ³, esto persiste) ---------- */
+/* ---------- ESCRITURAS (optimistas: la UI ya cambiÃƒÆ’Ã‚Â³, esto persiste) ---------- */
 
 export async function persistLeadPatch(lead: Lead, patch: Partial<Lead>) {
   const supabase = createBrowserSupabaseClient()
@@ -232,6 +177,7 @@ export async function persistMessage(accountId: string, userId: string, lead: Le
       .update({ last_message_at: new Date().toISOString(), last_message_preview: body.slice(0, 60) })
       .eq('id', convo.id)
 }
+
 
 
 
