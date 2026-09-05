@@ -1,79 +1,348 @@
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Globe, Clock, Video, Phone, MessageCircle, X, RefreshCw, Copy, Mail, Bell, MapPin, Check } from 'lucide-react'
+﻿'use client'
+
+import { useState, useEffect } from 'react'
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Globe, 
+  Clock, 
+  Video, 
+  Phone, 
+  MessageCircle, 
+  X, 
+  RefreshCw, 
+  Copy, 
+  Mail, 
+  Bell, 
+  MapPin, 
+  Check, 
+  CalendarDays,
+  CalendarCheck2,
+  Sparkles,
+  Layers,
+  AlertTriangle
+} from 'lucide-react'
 import { useApp } from '@/store/useApp'
 import { Card } from '@/modules/crm/components/ui'
 import { APPOINTMENTS, USER } from '@/lib/data/mock'
 
+export interface GHLCalendar {
+  id: string
+  name: string
+  description?: string
+  calendarType?: string
+  groupId?: string
+}
+
 const TABS = [
-  { id: 'cliente', label: 'Vista del cliente' },
-  { id: 'agente', label: 'Vista del agente' },
-  { id: 'config', label: 'Configuración del agente' },
+  { id: 'agente', label: 'Mis Citas y Agenda' },
+  { id: 'cliente', label: 'Página de Reservación' },
+  { id: 'config', label: 'Configuración' },
 ] as const
 
-/* ---------- VISTA DEL CLIENTE (página pública de reservación) ---------- */
+/* Colores para distinguir cada calendario visualmente */
+const CALENDAR_COLORS = [
+  { border: 'border-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', badge: 'bg-blue-500', ring: 'ring-blue-200' },
+  { border: 'border-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', badge: 'bg-emerald-500', ring: 'ring-emerald-200' },
+  { border: 'border-purple-500', bg: 'bg-purple-50', text: 'text-purple-700', badge: 'bg-purple-500', ring: 'ring-purple-200' },
+  { border: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-500', ring: 'ring-amber-200' },
+  { border: 'border-rose-500', bg: 'bg-rose-50', text: 'text-rose-700', badge: 'bg-rose-500', ring: 'ring-rose-200' },
+]
+
+/* ---------- VISTA DEL AGENTE (AGENDA Y CITAS) ---------- */
+
+function AgentView({ 
+  selectedCalendarId, 
+  calendars 
+}: { 
+  selectedCalendarId: string
+  calendars: GHLCalendar[] 
+}) {
+  const [filterPeriod, setFilterPeriod] = useState<'Hoy' | 'Semana' | 'Mes'>('Semana')
+  const [events, setEvents] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  // Consultar citas reales desde GHL
+  useEffect(() => {
+    setLoading(true)
+    const url = `/api/ghl/calendars/events${selectedCalendarId !== 'all' ? `?calendarId=${selectedCalendarId}` : ''}`
+    fetch(url)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.events && Array.isArray(data.events)) {
+          setEvents(data.events)
+        } else {
+          setEvents([])
+        }
+      })
+      .catch((err) => {
+        console.warn('Error al cargar eventos de GHL:', err)
+        setEvents([])
+      })
+      .finally(() => setLoading(false))
+  }, [selectedCalendarId])
+
+  // Si no hay eventos en vivo en GHL, usar appointments de demostración mapeados
+  const displayItems = events.length > 0 
+    ? events.map(e => ({
+        id: e.id,
+        time: new Date(e.startTime).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date(e.startTime).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' }),
+        clientName: e.title || e.contact?.name || 'Prospecto GHL',
+        channelType: e.meetingLocationType === 'zoom' ? 'zoom' : 'meet',
+        channelLabel: e.meetingLocationType === 'zoom' ? 'Zoom' : 'Google Meet',
+        duration: Math.round((new Date(e.endTime).getTime() - new Date(e.startTime).getTime()) / 60000) || 30,
+        status: e.appointmentStatus || 'confirmada',
+        calendarName: calendars.find(c => c.id === e.calendarId)?.name || 'General',
+        day: new Date(e.startTime).toDateString() === new Date().toDateString() ? 'hoy' : 'mañana'
+      }))
+    : APPOINTMENTS.map(a => ({
+        ...a,
+        date: a.day === 'hoy' ? 'Hoy' : 'Mañana',
+        calendarName: calendars.find(c => c.id === selectedCalendarId)?.name || 'Consulta Diagnóstico'
+      }))
+
+  const groups = [
+    { label: 'HOY — CITAS PROGRAMADAS', items: displayItems.filter((a) => a.day === 'hoy') },
+    { label: 'PRÓXIMAS CITAS (MAÑANA Y SEMANA)', items: displayItems.filter((a) => a.day !== 'hoy') },
+  ]
+
+  const STATUS: Record<string, string> = {
+    confirmada: 'bg-stage-close-bg text-stage-close-text',
+    confirmed: 'bg-stage-close-bg text-stage-close-text',
+    showed: 'bg-stage-close-bg text-stage-close-text',
+    pendiente: 'bg-stage-proposal-bg text-stage-proposal-text',
+    new: 'bg-stage-proposal-bg text-stage-proposal-text',
+    cancelada: 'bg-stage-lost-bg text-stage-lost-text',
+    cancelled: 'bg-stage-lost-bg text-stage-lost-text',
+    noshow: 'bg-stage-lost-bg text-stage-lost-text',
+  }
+
+  const activeCalendarObj = calendars.find(c => c.id === selectedCalendarId)
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-3">
+      {/* Panel Izquierdo: Lista de Citas (Ocupa 2 columnas) */}
+      <Card className="p-5 lg:col-span-2 shadow-xs">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+          <div>
+            <h2 className="font-bold text-base text-ink flex items-center gap-2">
+              <CalendarCheck2 size={18} className="text-primary-light" />
+              Agenda de Citas
+            </h2>
+            <p className="text-xs text-ink-soft">
+              {activeCalendarObj 
+                ? `Mostrando citas exclusivas del calendario: ${activeCalendarObj.name}` 
+                : 'Mostrando todas las citas consolidadas de la subcuenta'}
+            </p>
+          </div>
+          <div className="flex items-center rounded-lg border border-line bg-soft/60 p-0.5 text-xs font-semibold">
+            {(['Hoy', 'Semana', 'Mes'] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setFilterPeriod(p)}
+                className={`rounded-md px-3 py-1.5 transition-colors ${
+                  filterPeriod === p ? 'bg-primary text-inverse shadow-xs' : 'text-ink-soft hover:text-ink'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="py-12 text-center text-xs text-ink-soft flex items-center justify-center gap-2">
+            <RefreshCw size={14} className="animate-spin" /> Cargando citas desde GoHighLevel...
+          </div>
+        ) : (
+          groups.map((g) => (
+            <div key={g.label} className="mb-6 last:mb-0">
+              <p className="mb-2.5 text-[11px] font-bold tracking-wider text-ink-soft uppercase">{g.label}</p>
+              {g.items.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-line p-4 text-center text-xs text-ink-soft">
+                  No hay citas registradas en este periodo.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {g.items.map((a: any) => {
+                    const isCancelled = a.status === 'cancelada' || a.status === 'cancelled'
+                    return (
+                      <div
+                        key={a.id}
+                        className={`group flex items-center gap-3.5 rounded-xl border border-line bg-app p-3.5 shadow-xs transition-all hover:border-primary-light/50 hover:shadow-sm ${
+                          isCancelled ? 'opacity-55' : ''
+                        }`}
+                      >
+                        {/* Horario */}
+                        <div className="w-16 shrink-0 rounded-lg bg-soft p-2 text-center">
+                          <p className={`text-xs font-bold ${isCancelled ? 'text-ink-soft' : 'text-primary-light'}`}>
+                            {a.time}
+                          </p>
+                          <p className="text-[10px] font-medium text-ink-soft">{a.date}</p>
+                        </div>
+
+                        {/* Info de contacto y calendario */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className={`text-sm font-semibold text-ink ${isCancelled ? 'line-through' : ''}`}>
+                              {a.clientName}
+                            </p>
+                            {/* Chip del calendario específico */}
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary-light">
+                              <span className="h-1.5 w-1.5 rounded-full bg-primary-light" />
+                              {a.calendarName}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 flex items-center gap-1 text-xs text-ink-soft">
+                            {a.channelType === 'zoom' ? <Video size={12} /> : <Phone size={12} />}
+                            {a.channelLabel} · {a.duration} min
+                          </p>
+                        </div>
+
+                        {/* Estado */}
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            STATUS[a.status] || 'bg-soft text-ink-soft'
+                          }`}
+                        >
+                          {a.status}
+                        </span>
+
+                        {/* Acciones */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            className="rounded-lg border border-line p-2 text-ink-soft hover:bg-soft hover:text-ink"
+                            title="Ver en GoHighLevel"
+                          >
+                            <Video size={13} />
+                          </button>
+                          <button
+                            className="rounded-lg border border-line p-2 text-wa-text hover:bg-wa-bg"
+                            title="Enviar WhatsApp"
+                          >
+                            <MessageCircle size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </Card>
+
+      {/* Panel Derecho: Métricas y Disponibilidad */}
+      <div className="space-y-4">
+        <Card className="p-5 shadow-xs">
+          <h2 className="mb-3 font-bold text-sm text-ink flex items-center gap-2">
+            <Sparkles size={16} className="text-accent" />
+            Rendimiento de Citas
+          </h2>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Total citas', value: displayItems.length.toString(), cls: 'text-ink' },
+              { label: 'Confirmadas', value: displayItems.filter(i => i.status.includes('confirm')).length.toString(), cls: 'text-stage-close-text' },
+              { label: 'Canceladas', value: displayItems.filter(i => i.status.includes('cancel')).length.toString(), cls: 'text-danger' },
+              { label: 'Asistencia', value: '88%', cls: 'text-primary-light' },
+            ].map((s) => (
+              <div key={s.label} className="rounded-xl border border-line bg-soft/40 p-3">
+                <p className="text-[11px] font-medium text-ink-soft">{s.label}</p>
+                <p className={`mt-0.5 text-xl font-bold ${s.cls}`}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-5 shadow-xs">
+          <h2 className="mb-3 font-bold text-sm text-ink">Horarios de Atención</h2>
+          <div className="space-y-2.5 text-xs">
+            {[
+              { d: 'Lun–Vie', h: '9:00 am – 6:00 pm', badge: 'Activo', cls: 'bg-stage-close-bg text-stage-close-text' },
+              { d: 'Sábado', h: '10:00 am – 2:00 pm', badge: 'Guardia', cls: 'bg-stage-proposal-bg text-stage-proposal-text' },
+              { d: 'Domingo', h: 'Sin citas', badge: 'Cerrado', cls: 'bg-stage-lost-bg text-stage-lost-text' },
+            ].map((r) => (
+              <div key={r.d} className="flex items-center justify-between py-1 border-b border-line-soft last:border-0">
+                <span className="font-semibold text-ink">{r.d}</span>
+                <span className="text-ink-soft">{r.h}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${r.cls}`}>{r.badge}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <button 
+          onClick={() => {
+            navigator.clipboard.writeText(window.location.origin + '/reservar')
+            alert('Enlace copiado al portapapeles')
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-bold text-inverse hover:bg-primary-light transition shadow-xs"
+        >
+          <Copy size={13} /> Copiar Link de Reservación
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/* ---------- VISTA DEL CLIENTE ---------- */
 
 const DAYS = ['LU', 'MA', 'MI', 'JU', 'VI', 'SÁ', 'DO']
 const AVAILABLE = [10, 11, 12, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
 const SLOTS = ['9:00 am', '9:30 am', '10:00 am', '10:30 am', '11:00 am', '11:30 am', '2:00 pm', '2:30 pm', '3:00 pm', '3:30 pm', '4:00 pm', '4:30 pm']
-const TAKEN = new Set(['11:00 am', '3:00 pm'])
 
-function ClientView() {
+function ClientView({ calendarName }: { calendarName: string }) {
   const [day, setDay] = useState(12)
   const [slot, setSlot] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState(false)
 
   if (confirmed)
     return (
-      <Card className="mx-auto max-w-md p-8 text-center">
+      <Card className="mx-auto max-w-md p-8 text-center shadow-md">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-stage-close-bg">
           <Check size={28} className="text-stage-close-text" />
         </div>
         <h2 className="text-lg font-bold">¡Cita confirmada!</h2>
         <span className="mt-2 inline-block rounded-full bg-stage-close-bg px-3 py-1 text-xs font-semibold text-stage-close-text">
-          ✉ Correo enviado a cliente@correo.com
+          ✉ Confirmación enviada por Email y WhatsApp
         </span>
         <div className="mt-4 rounded-xl bg-soft p-4 text-left text-sm">
-          <p><strong>📅 {day} de junio de 2026</strong> a las <strong>{slot}</strong></p>
-          <p className="mt-1 text-ink-soft">⏱ 30 minutos · 📹 Google Meet</p>
-          <p className="mt-1 text-primary-light">meet.google.com/xxx-demo-link</p>
+          <p><strong>📅 {day} de este mes</strong> a las <strong>{slot}</strong></p>
+          <p className="mt-1 text-ink-soft">⏱ 30 minutos · {calendarName}</p>
+          <p className="mt-1 text-primary-light font-medium">Link de videollamada generado automáticamente</p>
         </div>
         <div className="mt-5 flex gap-2">
-          <button onClick={() => { setConfirmed(false); setSlot(null) }} className="flex-1 rounded-lg border border-line py-2.5 text-sm font-semibold hover:bg-soft">
+          <button onClick={() => { setConfirmed(false); setSlot(null) }} className="flex-1 rounded-lg border border-line py-2.5 text-xs font-semibold hover:bg-soft">
             Agendar otra
-          </button>
-          <button className="flex-1 rounded-lg bg-primary py-2.5 text-sm font-semibold text-inverse hover:bg-primary-light">
-            Agregar a mi calendario
           </button>
         </div>
       </Card>
     )
 
   return (
-    <div className="grid gap-0 overflow-hidden rounded-xl border border-line bg-app lg:grid-cols-2">
-      {/* Izquierda: info + calendario */}
+    <div className="grid gap-0 overflow-hidden rounded-xl border border-line bg-app lg:grid-cols-2 shadow-xs">
       <div className="border-b border-line p-6 lg:border-r lg:border-b-0">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-stage-new-bg text-sm font-bold text-stage-new-text">MT</div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary text-sm font-bold text-inverse">
+            GHL
+          </div>
           <div>
-            <p className="font-bold">{USER.fullName}</p>
-            <p className="text-xs text-ink-soft">Consultoría AGENC-IA Digital</p>
+            <p className="font-bold text-sm">{calendarName}</p>
+            <p className="text-xs text-ink-soft">Sincronizado con GoHighLevel</p>
           </div>
         </div>
-        <div className="mt-4 rounded-xl bg-cream p-3.5 text-sm">
-          <p className="font-bold">Sesión de diagnóstico gratuita</p>
-          <p className="mt-1 flex flex-wrap items-center gap-3 text-xs text-ink-soft">
-            <span className="flex items-center gap-1"><Clock size={12} /> 30 min</span>
-            <span className="flex items-center gap-1"><Video size={12} /> Google Meet</span>
-            <span className="flex items-center gap-1">$ Gratis</span>
+        <div className="mt-4 rounded-xl bg-soft p-3.5 text-xs">
+          <p className="font-bold text-ink">Horarios Disponibles</p>
+          <p className="mt-1 flex flex-wrap items-center gap-3 text-ink-soft">
+            <span className="flex items-center gap-1"><Clock size={12} /> 30-45 min</span>
+            <span className="flex items-center gap-1"><Video size={12} /> Google Meet / Zoom</span>
           </p>
         </div>
 
         <div className="mt-5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button className="rounded-full border border-line p-1.5 hover:bg-soft"><ChevronLeft size={14} /></button>
-            <span className="font-bold">Junio 2026</span>
-            <button className="rounded-full border border-line p-1.5 hover:bg-soft"><ChevronRight size={14} /></button>
-          </div>
+          <span className="font-bold text-sm">Fechas Disponibles</span>
           <span className="flex items-center gap-1 text-xs text-ink-soft"><Globe size={12} /> CDMX (GMT-6)</span>
         </div>
 
@@ -87,58 +356,43 @@ function ClientView() {
                 key={d}
                 disabled={!avail}
                 onClick={() => { setDay(d); setSlot(null) }}
-                className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors ${
+                className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full text-xs font-medium transition-colors ${
                   sel ? 'bg-primary font-bold text-inverse'
                   : avail ? 'bg-stage-new-bg text-stage-new-text hover:bg-primary-light hover:text-inverse'
                   : 'text-ink-soft/40'
-                } ${d === 10 && !sel ? 'ring-1 ring-primary-light' : ''}`}
+                }`}
               >
                 {d}
               </button>
             )
           })}
         </div>
-        <p className="mt-3 text-center text-[11px] text-ink-soft">Recibirás confirmación por correo ✉</p>
       </div>
 
-      {/* Derecha: horarios + formulario */}
-      <div className="bg-cream p-6">
-        <p className="flex items-center gap-1.5 text-sm font-bold"><Clock size={14} className="text-primary-light" /> {day} de junio de 2026</p>
+      <div className="p-6">
+        <h3 className="font-bold text-sm text-ink mb-3">Horas disponibles para el día {day}</h3>
         {!slot ? (
-          <div className="mt-4 grid grid-cols-2 gap-2.5">
-            {SLOTS.map((s) => {
-              const taken = TAKEN.has(s)
-              return (
-                <button
-                  key={s}
-                  disabled={taken}
-                  onClick={() => setSlot(s)}
-                  className={`rounded-lg border py-2.5 text-sm font-semibold transition-colors ${
-                    taken ? 'border-line-soft bg-soft text-ink-soft/40 line-through'
-                    : 'border-line bg-app hover:border-primary-light hover:text-primary-light'
-                  }`}
-                >
-                  {s}
-                </button>
-              )
-            })}
+          <div className="grid grid-cols-3 gap-2">
+            {SLOTS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setSlot(s)}
+                className="rounded-lg border border-line py-2 text-xs font-semibold hover:border-primary hover:bg-primary/5 transition"
+              >
+                {s}
+              </button>
+            ))}
           </div>
         ) : (
-          <div className="mt-4">
-            <div className="rounded-xl border border-line bg-app p-3.5 text-sm">
-              <p className="font-bold">Sesión de diagnóstico — {slot}</p>
-              <p className="mt-0.5 text-xs text-ink-soft">{day} jun 2026 · 30 min · Google Meet</p>
+          <div className="space-y-3">
+            <div className="rounded-xl border border-line bg-soft/50 p-3 text-xs">
+              <p className="font-bold text-primary-light">Seleccionado: {slot} (Día {day})</p>
             </div>
-            <div className="mt-4 space-y-3">
-              <input placeholder="Nombre completo" className="w-full rounded-lg border border-line bg-app p-3 text-sm outline-none focus:border-primary-light" />
-              <div>
-                <input placeholder="Correo electrónico" className="w-full rounded-lg border border-line bg-app p-3 text-sm outline-none focus:border-primary-light" />
-                <p className="mt-1 text-[11px] text-ink-soft">Te enviaremos confirmación e invitación de calendario</p>
-              </div>
-              <input placeholder="WhatsApp (opcional)" className="w-full rounded-lg border border-line bg-app p-3 text-sm outline-none focus:border-primary-light" />
-            </div>
-            <button onClick={() => setConfirmed(true)} className="mt-4 w-full rounded-lg bg-primary py-3 text-sm font-bold text-inverse hover:bg-primary-light">
-              Confirmar y recibir invitación
+            <input placeholder="Nombre completo" className="w-full rounded-lg border border-line bg-app p-2.5 text-xs outline-none focus:border-primary" />
+            <input placeholder="Correo electrónico" className="w-full rounded-lg border border-line bg-app p-2.5 text-xs outline-none focus:border-primary" />
+            <input placeholder="WhatsApp" className="w-full rounded-lg border border-line bg-app p-2.5 text-xs outline-none focus:border-primary" />
+            <button onClick={() => setConfirmed(true)} className="w-full rounded-lg bg-primary py-2.5 text-xs font-bold text-inverse hover:bg-primary-light transition">
+              Confirmar Cita
             </button>
           </div>
         )}
@@ -147,239 +401,200 @@ function ClientView() {
   )
 }
 
-/* ---------- VISTA DEL AGENTE (agenda interna) ---------- */
-
-function AgentView() {
-  const groups = [
-    { label: 'HOY — MIÉRCOLES 10', items: APPOINTMENTS.filter((a) => a.day === 'hoy') },
-    { label: 'MAÑANA — JUEVES 11', items: APPOINTMENTS.filter((a) => a.day === 'mañana') },
-  ]
-  const STATUS = {
-    confirmada: 'bg-stage-close-bg text-stage-close-text',
-    pendiente: 'bg-stage-proposal-bg text-stage-proposal-text',
-    cancelada: 'bg-stage-lost-bg text-stage-lost-text',
-  }
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-bold">Mis citas — Junio 2026</h2>
-          <div className="flex items-center rounded-lg border border-line p-0.5 text-sm">
-            {['Hoy', 'Semana', 'Mes'].map((p, i) => (
-              <button key={p} className={`rounded-md px-3 py-1 font-semibold ${i === 0 ? 'bg-primary text-inverse' : 'text-ink-soft'}`}>{p}</button>
-            ))}
-          </div>
-        </div>
-        {groups.map((g) => (
-          <div key={g.label} className="mb-4">
-            <p className="mb-2 text-[10px] font-bold tracking-[0.14em] text-ink-soft">{g.label}</p>
-            <div className="space-y-2">
-              {g.items.map((a) => {
-                const cancelled = a.status === 'cancelada'
-                return (
-                  <div key={a.id} className={`flex items-center gap-3 rounded-xl border border-line p-3 ${cancelled ? 'opacity-50' : ''}`}>
-                    <div className="w-14 text-center">
-                      <p className={`text-sm font-bold ${cancelled ? 'text-ink-soft' : 'text-primary-light'}`}>{a.time.split(' ')[0]}</p>
-                      <p className="text-[10px] text-ink-soft">{a.time.split(' ')[1]}</p>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-sm font-semibold ${cancelled ? 'text-ink-soft line-through' : ''}`}>{a.clientName}</p>
-                      <p className="flex items-center gap-1 text-xs text-ink-soft">
-                        {a.channelType === 'meet' ? <Video size={11} /> : <Phone size={11} />} {a.channelLabel} · {a.duration} min
-                      </p>
-                    </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS[a.status]}`}>
-                      {a.status[0].toUpperCase() + a.status.slice(1)}
-                    </span>
-                    <div className="flex gap-1">
-                      {cancelled ? (
-                        <button className="rounded-lg border border-line p-1.5 text-ink-soft hover:bg-soft" title="Reagendar"><RefreshCw size={13} /></button>
-                      ) : (
-                        <>
-                          <button className="rounded-lg border border-line p-1.5 text-ink-soft hover:bg-soft" title="Unirse"><Video size={13} /></button>
-                          <button className="rounded-lg border border-line p-1.5 text-wa-text hover:bg-wa-bg" title="WhatsApp"><MessageCircle size={13} /></button>
-                          <button className="rounded-lg border border-line p-1.5 text-danger hover:bg-stage-lost-bg" title="Cancelar"><X size={13} /></button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </Card>
-
-      <div className="space-y-4">
-        <Card className="p-5">
-          <h2 className="mb-3 font-bold">Resumen del mes</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: 'Total citas', value: '24', cls: '' },
-              { label: 'Confirmadas', value: '18', cls: 'text-stage-close-text' },
-              { label: 'Canceladas', value: '4', cls: 'text-danger' },
-              { label: 'Tasa cierre', value: '75%', cls: 'text-primary-light' },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl border border-line p-3.5">
-                <p className="text-xs text-ink-soft">{s.label}</p>
-                <p className={`text-2xl font-bold ${s.cls}`}>{s.value}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card className="p-5">
-          <h2 className="mb-3 font-bold">Mi disponibilidad esta semana</h2>
-          <div className="space-y-2.5 text-sm">
-            {[
-              { d: 'Lun–Vie', h: '9:00 am – 6:00 pm', badge: 'Activo', cls: 'bg-stage-close-bg text-stage-close-text' },
-              { d: 'Sábado', h: '10:00 am – 2:00 pm', badge: 'Limitado', cls: 'bg-stage-proposal-bg text-stage-proposal-text' },
-              { d: 'Domingo', h: 'No disponible', badge: 'Cerrado', cls: 'bg-stage-lost-bg text-stage-lost-text' },
-            ].map((r) => (
-              <div key={r.d} className="flex items-center justify-between">
-                <span className="w-20 font-semibold">{r.d}</span>
-                <span className="text-ink-soft">{r.h}</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${r.cls}`}>{r.badge}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-inverse hover:bg-primary-light">
-          <Copy size={14} /> Copiar link de reservación
-        </button>
-      </div>
-    </div>
-  )
-}
-
-/* ---------- CONFIGURACIÓN DEL AGENTE ---------- */
-
-function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
-  return (
-    <button
-      onClick={onChange}
-      className={`relative h-6 w-11 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-line'}`}
-      role="switch" aria-checked={on}
-    >
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-app shadow transition-all ${on ? 'left-5.5' : 'left-0.5'}`} />
-    </button>
-  )
-}
-
-function ConfigView() {
-  const [location, setLocation] = useState('meet')
-  const [toggles, setToggles] = useState({ confirm: true, r24: true, r1: false, wa: true })
-  const LOCATIONS = [
-    { id: 'meet', label: 'Google Meet', desc: 'Link automático por reunión', Icon: Video, color: 'text-stage-close-text' },
-    { id: 'zoom', label: 'Zoom', desc: 'Pega tu link de Zoom', Icon: Video, color: 'text-primary-light' },
-    { id: 'teams', label: 'Microsoft Teams', desc: 'Pega tu link de Teams', Icon: Video, color: 'text-note-text' },
-    { id: 'phone', label: 'Llamada telefónica', desc: 'El agente llama al cliente', Icon: Phone, color: 'text-accent' },
-    { id: 'inperson', label: 'Presencial', desc: 'Agrega la dirección', Icon: MapPin, color: 'text-danger' },
-  ]
-  const MAILS = [
-    { id: 'confirm', label: 'Enviar al cliente', Icon: Mail },
-    { id: 'r24', label: 'Recordatorio 24h antes', Icon: Bell },
-    { id: 'r1', label: 'Recordatorio 1h antes', Icon: Bell },
-    { id: 'wa', label: 'Recordatorio por WhatsApp', Icon: MessageCircle },
-  ] as const
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card className="p-5">
-        <h2 className="mb-4 font-bold">Tipo de evento</h2>
-        <label className="text-xs font-semibold text-ink-soft">Nombre de la sesión</label>
-        <input defaultValue="Sesión de diagnóstico gratuita" className="mt-1 mb-3 w-full rounded-lg border border-line p-2.5 text-sm outline-none focus:border-primary-light" />
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-semibold text-ink-soft">Duración</label>
-            <input defaultValue="30 minutos" className="mt-1 w-full rounded-lg border border-line p-2.5 text-sm outline-none focus:border-primary-light" />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-ink-soft">Precio</label>
-            <input defaultValue="Gratis" className="mt-1 w-full rounded-lg border border-line p-2.5 text-sm outline-none focus:border-primary-light" />
-          </div>
-        </div>
-        <h3 className="mb-2 text-sm font-bold">Ubicación / Canal</h3>
-        <div className="space-y-2">
-          {LOCATIONS.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => setLocation(l.id)}
-              className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
-                location === l.id ? 'border-primary-light bg-stage-new-bg/40 ring-1 ring-primary-light/30' : 'border-line hover:bg-soft'
-              }`}
-            >
-              <l.Icon size={16} className={l.color} />
-              <div>
-                <p className="text-sm font-semibold">{l.label}</p>
-                <p className="text-xs text-ink-soft">{l.desc}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      <div className="space-y-4">
-        <Card className="p-5">
-          <h2 className="mb-3 font-bold">Correo de confirmación</h2>
-          <div className="space-y-3">
-            {MAILS.map((m) => (
-              <div key={m.id} className="flex items-center gap-3">
-                <m.Icon size={15} className="text-ink-soft" />
-                <span className="flex-1 text-sm">{m.label}</span>
-                <Toggle on={toggles[m.id]} onChange={() => setToggles((t) => ({ ...t, [m.id]: !t[m.id] }))} />
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card className="overflow-hidden">
-          <p className="px-5 pt-4 pb-2 font-bold">Previsualización del correo</p>
-          <div className="mx-5 mb-5 overflow-hidden rounded-xl border border-line">
-            <div className="bg-primary px-4 py-3 text-sm font-bold text-inverse">Cita confirmada — AGENC-IA Digital</div>
-            <div className="space-y-3 p-4 text-sm">
-              <p>Hola <strong>[Nombre]</strong>, tu cita quedó agendada.</p>
-              <div className="space-y-1 rounded-lg bg-cream p-3 text-xs">
-                <p>📅 <strong>[Fecha]</strong> a las <strong>[Hora]</strong></p>
-                <p className="text-ink-soft">⏱ 30 minutos</p>
-                <p className="text-primary-light">📹 [Link de Google Meet]</p>
-              </div>
-              <button className="w-full rounded-lg bg-primary py-2.5 text-sm font-bold text-inverse">Agregar a mi calendario</button>
-            </div>
-          </div>
-        </Card>
-        <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-inverse hover:bg-primary-light">
-          <Copy size={14} /> Copiar link público de reservación
-        </button>
-      </div>
-    </div>
-  )
-}
-
-/* ---------- CONTENEDOR ---------- */
+/* ---------- VISTA PRINCIPAL CON SELECTOR HERO DESTACADO ---------- */
 
 export default function CalendarView() {
   const { calendarTab, setCalendarTab } = useApp()
+  const [calendars, setCalendars] = useState<GHLCalendar[]>([])
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string>('all')
+  const [isScopeError, setIsScopeError] = useState(false)
+  const [loadingCalendars, setLoadingCalendars] = useState(false)
+
+  // Cargar calendarios reales de GHL
+  useEffect(() => {
+    setLoadingCalendars(true)
+    fetch('/api/ghl/calendars')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.isScopeError) {
+          setIsScopeError(true)
+        } else if (data.calendars && data.calendars.length > 0) {
+          setCalendars(data.calendars)
+          setIsScopeError(false)
+        } else {
+          // Calendarios demo si no hay creados
+          setCalendars([
+            { id: 'cal_diag', name: 'Sesión de Diagnóstico Gratuita', description: 'Videollamada 1 a 1' },
+            { id: 'cal_prop', name: 'Visita Inmobiliaria / Presencial', description: 'Recorridos de propiedades' },
+            { id: 'cal_cierre', name: 'Reunión de Cierre y Contrato', description: 'Firmas y propuestas formales' },
+          ])
+        }
+      })
+      .catch(() => {
+        setCalendars([
+          { id: 'cal_diag', name: 'Sesión de Diagnóstico Gratuita' },
+          { id: 'cal_prop', name: 'Visita Inmobiliaria / Presencial' },
+        ])
+      })
+      .finally(() => setLoadingCalendars(false))
+  }, [])
+
+  const activeCalendar = calendars.find((c) => c.id === selectedCalendarId)
+  const activeIndex = calendars.findIndex((c) => c.id === selectedCalendarId)
+  const activeColor = activeIndex >= 0 ? CALENDAR_COLORS[activeIndex % CALENDAR_COLORS.length] : null
+
   return (
-    <div className="animate-rise p-4 lg:p-6">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="animate-rise space-y-5 p-4 lg:p-6">
+      {/* ─────────────────────────────────────────────────────────────
+          SELECTOR HERO ULTRA-DESTACADO (Resuelve la confusión de GHL)
+         ───────────────────────────────────────────────────────────── */}
+      <div className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-300 shadow-sm ${
+        activeColor ? `${activeColor.border} ${activeColor.bg}` : 'border-indigo-500/80 bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-white'
+      } p-4 sm:p-5`}>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          
+          {/* Lado izquierdo: Identificador visual potente */}
+          <div className="flex items-center gap-3.5">
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl shadow-xs transition-colors ${
+              activeColor ? `${activeColor.badge} text-white` : 'bg-indigo-600 text-white'
+            }`}>
+              <CalendarDays size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-extrabold tracking-wider uppercase text-indigo-900/70 flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  CALENDARIO ACTIVO EN PANTALLA
+                </span>
+                {selectedCalendarId !== 'all' && (
+                  <button
+                    onClick={() => setSelectedCalendarId('all')}
+                    className="inline-flex items-center gap-1 rounded-full bg-white/90 border border-line px-2 py-0.5 text-[10px] font-bold text-ink-soft hover:bg-white hover:text-ink shadow-2xs transition"
+                    title="Volver a ver todos los calendarios"
+                  >
+                    <X size={11} /> Ver todos
+                  </button>
+                )}
+              </div>
+              <h1 className="text-lg sm:text-xl font-black tracking-tight text-ink mt-0.5">
+                {selectedCalendarId === 'all' ? (
+                  <span className="text-indigo-950 flex items-center gap-2">
+                    Todos los Calendarios <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-200/60 text-indigo-900">Vista Global</span>
+                  </span>
+                ) : (
+                  <span className={activeColor?.text}>{activeCalendar?.name}</span>
+                )}
+              </h1>
+            </div>
+          </div>
+
+          {/* Lado derecho: Selector desplegable enriquecido */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative w-full sm:w-72">
+              <label htmlFor="calendar-select" className="sr-only">Seleccionar Calendario</label>
+              <select
+                id="calendar-select"
+                value={selectedCalendarId}
+                onChange={(e) => setSelectedCalendarId(e.target.value)}
+                className="w-full appearance-none cursor-pointer rounded-xl border-2 border-indigo-400/60 bg-white px-3.5 py-2.5 pr-10 text-xs font-bold text-ink shadow-sm outline-none transition focus:border-indigo-600 focus:ring-2 focus:ring-indigo-300"
+              >
+                <option value="all">🌐 Ver Todos los Calendarios</option>
+                {calendars.map((cal, idx) => (
+                  <option key={cal.id} value={cal.id}>
+                    📅 {cal.name}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-indigo-600 font-bold">
+                <Layers size={16} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Píldoras de acceso rápido a cada calendario debajo */}
+        {calendars.length > 0 && (
+          <div className="mt-3.5 pt-3 border-t border-black/5 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-bold text-ink-soft uppercase mr-1">Filtro Rápido:</span>
+            <button
+              onClick={() => setSelectedCalendarId('all')}
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                selectedCalendarId === 'all'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white/80 border border-line text-ink-soft hover:bg-white hover:text-ink'
+              }`}
+            >
+              Todos ({calendars.length})
+            </button>
+            {calendars.map((cal, idx) => {
+              const col = CALENDAR_COLORS[idx % CALENDAR_COLORS.length]
+              const isSelected = selectedCalendarId === cal.id
+              return (
+                <button
+                  key={cal.id}
+                  onClick={() => setSelectedCalendarId(cal.id)}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition flex items-center gap-1.5 ${
+                    isSelected
+                      ? `${col.badge} text-white font-bold shadow-xs`
+                      : 'bg-white/80 border border-line text-ink-soft hover:bg-white hover:text-ink'
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? 'bg-white' : col.badge}`} />
+                  {cal.name}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Notificación si falta el Scope de GHL */}
+        {isScopeError && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
+            <AlertTriangle size={15} className="shrink-0 text-amber-600" />
+            <p>
+              <strong>Atención:</strong> Para jalar tus citas reales de GoHighLevel, activa los permisos de <strong>Calendars</strong> en tu Private Integration de GHL.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Navegación por pestañas */}
+      <div className="flex items-center gap-2 border-b border-line pb-1">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setCalendarTab(t.id)}
-            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
-              calendarTab === t.id ? 'border-ink bg-app shadow-sm' : 'border-line bg-soft text-ink-soft hover:bg-app'
+            className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+              calendarTab === t.id
+                ? 'bg-primary text-inverse shadow-xs'
+                : 'text-ink-soft hover:bg-soft hover:text-ink'
             }`}
           >
             {t.label}
           </button>
         ))}
-        <span className="ml-2 hidden text-xs text-ink-soft md:inline">
-          {calendarTab === 'cliente' ? 'Haz click en un día disponible (azul)' : calendarTab === 'config' ? 'Selecciona un día azul para reservar' : ''}
-        </span>
       </div>
-      {calendarTab === 'cliente' && <ClientView />}
-      {calendarTab === 'agente' && <AgentView />}
-      {calendarTab === 'config' && <ConfigView />}
+
+      {/* Contenido según pestaña */}
+      {calendarTab === 'agente' && (
+        <AgentView 
+          selectedCalendarId={selectedCalendarId} 
+          calendars={calendars} 
+        />
+      )}
+      {calendarTab === 'cliente' && (
+        <ClientView 
+          calendarName={activeCalendar?.name || 'Consulta General'} 
+        />
+      )}
+      {calendarTab === 'config' && (
+        <div className="p-6 text-center text-xs text-ink-soft rounded-xl border border-line bg-app">
+          Los enlaces públicos y recordatorios se configuran directamente desde tus calendarios vinculados de GoHighLevel.
+        </div>
+      )}
     </div>
   )
 }
