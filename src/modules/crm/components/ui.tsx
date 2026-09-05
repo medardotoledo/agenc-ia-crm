@@ -54,8 +54,8 @@ export function StageSelect({ value, onChange }: { value: Stage; onChange: (s: S
         onChange={(e) => onChange(e.target.value as Stage)}
         className="cursor-pointer appearance-none bg-transparent py-0.5 pr-6 pl-2.5 text-xs font-semibold outline-none"
       >
-        {Object.entries(STAGE_META).map(([k, s]) => (
-          <option key={k} value={k}>{labels[k] ?? s.label}</option>
+        {Object.entries(Object.keys(labels).length > 0 ? labels : STAGE_META).map(([k, s]) => (
+          <option key={k} value={k}>{typeof s === 'string' ? s : (labels[k] ?? s.label)}</option>
         ))}
       </select>
       <ChevronDown size={12} className="pointer-events-none absolute right-1.5" />
@@ -107,6 +107,7 @@ export const CHANNEL_LABEL: Record<Channel, string> = {
 export function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <div className={`rounded-xl border border-line bg-app ${className}`}>{children}</div>
 }
+
 
 
 

@@ -87,7 +87,7 @@ export default function ExcelView() {
                   const isEditing = editing?.id === l.id && editing.key === c.key
 
                   if (isEditing && (c.key === 'stage' || c.key === 'temperature')) {
-                    const opts = c.key === 'stage' ? Object.keys(STAGE_META) : Object.keys(TEMP_META)
+                    const opts = c.key === 'stage' ? (Object.keys(stageLabels).length > 0 ? Object.keys(stageLabels) : Object.keys(STAGE_META)) : Object.keys(TEMP_META)
                     const labels = c.key === 'stage' ? STAGE_META : TEMP_META
                     return (
                       <td key={c.key} className={`${cellBase} bg-stage-new-bg/30 p-0`}>
@@ -102,7 +102,7 @@ export default function ExcelView() {
                           {opts.map((o) => (
                             <option key={o} value={o}>
                               {c.key === 'stage'
-                                ? (stageLabels[o] ?? (labels as Record<string, { label: string }>)[o].label)
+                                ? (stageLabels[o] ?? (labels as Record<string, { label: string }>)[o]?.label ?? o)
                                 : (labels as Record<string, { label: string }>)[o].label}
                             </option>
                           ))}
@@ -182,5 +182,6 @@ export default function ExcelView() {
     </div>
   )
 }
+
 
 

@@ -77,7 +77,7 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
       channels: ['whatsapp'],
       unread: 0,
       source: o.source || 'GHL',
-      tags: (o.tags || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
+      tags: ((o.tags && o.tags.length > 0 ? o.tags : o.contact?.tags) || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
     }));
   } catch (err: any) {
     console.error('Error fetching GHL opportunities in fetchLeads:', err); alert('Error GHL Opps: ' + err.message);
@@ -177,6 +177,7 @@ export async function persistMessage(accountId: string, userId: string, lead: Le
       .update({ last_message_at: new Date().toISOString(), last_message_preview: body.slice(0, 60) })
       .eq('id', convo.id)
 }
+
 
 
 
