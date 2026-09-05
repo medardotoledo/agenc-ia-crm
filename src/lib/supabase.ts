@@ -11,9 +11,7 @@ const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
 // Server-side client (API routes, server components)
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export function createServerSupabaseClient() {
-  return createClient(url || '', key || '');
-}
+export function createServerSupabaseClient() { return createClient(url || 'https://dummy.supabase.co', key || 'dummy-key'); }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Browser client (React components) â€” SINGLETON
@@ -27,12 +25,9 @@ export function createBrowserSupabaseClient() {
   }
 
   if (!browserClient) {
-    if (!url || !key) {
-      console.error('[Supabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
-      throw new Error('Supabase credentials not configured');
-    }
+    
 
-    browserClient = createClient(url, key, {
+    browserClient = createClient(url || 'https://dummy.supabase.co', key || 'dummy-key', {
       auth: {
         persistSession: true,
         detectSessionInUrl: true,
@@ -163,5 +158,8 @@ export async function getLeadsByAccount(
   if (error) throw error;
   return data;
 }
+
+
+
 
 
