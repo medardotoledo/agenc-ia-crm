@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Search, Phone, StickyNote, MessageCircle, ChevronDown, ArrowUpDown } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, StagePill, TempBadge, ScoreBar } from '@/modules/crm/components/ui'
@@ -21,7 +21,7 @@ export default function TableView() {
 
   const filtered = leads
     .filter((l) => (stageFilter === 'todas' ? true : l.stage === stageFilter))
-    .filter((l) => (q ? (l.name + l.company).toLowerCase().includes(q.toLowerCase()) : true))
+    .filter((l) => (q ? (l.name + (l.company || '') + (l.email || '') + (l.phone || '')).toLowerCase().includes(q.toLowerCase()) : true))
     .sort((a, b) => {
       const va = a[sort.key], vb = b[sort.key]
       return (typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number)) * sort.dir
@@ -46,7 +46,7 @@ export default function TableView() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar…"
+            placeholder="Buscarâ€¦"
             className="w-28 bg-transparent text-sm outline-none sm:w-40"
           />
         </div>
@@ -95,7 +95,7 @@ export default function TableView() {
               <th className="cursor-pointer px-2 py-3" onClick={() => toggleSort('score')}>
                 <span className="flex items-center gap-1">Score <ArrowUpDown size={11} /></span>
               </th>
-              <th className="px-2 py-3">Última nota</th>
+              <th className="px-2 py-3">Ãšltima nota</th>
               <th className="px-2 py-3">Vence</th>
               <th className="w-28 px-2 py-3" />
             </tr>
@@ -134,7 +134,7 @@ export default function TableView() {
                         <span className="truncate">{note.content}</span>
                       </span>
                     ) : (
-                      <span className="text-xs text-ink-soft/50">—</span>
+                      <span className="text-xs text-ink-soft/50">â€”</span>
                     )}
                   </td>
                   <td className={`px-2 py-3 text-xs ${due.cls}`}>{due.text}</td>
@@ -154,3 +154,4 @@ export default function TableView() {
     </div>
   )
 }
+
