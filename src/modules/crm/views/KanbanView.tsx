@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Plus, CalendarDays, Zap, Clock } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, ChannelDot } from '@/modules/crm/components/ui'
@@ -62,12 +62,12 @@ function LeadCard({ lead, onDragStart }: { lead: Lead; onDragStart: (e: React.Dr
       )}
       {lead.unread > 0 && (
         <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-stage-new-bg px-2 py-0.5 text-[10px] font-bold text-stage-new-text">
-          💬 {lead.unread} nuevo{lead.unread > 1 ? 's' : ''}
+          ðŸ’¬ {lead.unread} nuevo{lead.unread > 1 ? 's' : ''}
         </span>
       )}
       <div className="mt-2 flex items-center justify-between border-t border-line-soft pt-2 text-xs text-ink-soft">
-        <span className="flex items-center gap-1"><CalendarDays size={11} /> {due.text === 'Hoy' || due.text === 'Mañana' ? due.text : due.text}</span>
-        <span>{TEMP_META[lead.temperature].icon}</span>
+        <span className="flex items-center gap-1"><CalendarDays size={11} /> {due.text === 'Hoy' || due.text === 'MaÃ±ana' ? due.text : due.text}</span>
+        <span>{(TEMP_META[lead.temperature]?.icon || '❓')}</span>
       </div>
     </div>
   )
@@ -124,3 +124,4 @@ export default function KanbanView() {
     </div>
   )
 }
+

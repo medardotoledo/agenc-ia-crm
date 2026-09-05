@@ -1,8 +1,8 @@
-'use client'
+﻿'use client'
 
 import { MessageCircle, Mail, ChevronDown } from 'lucide-react'
 
-/* lucide eliminó los íconos de marca — SVGs propios para FB e IG */
+/* lucide eliminÃ³ los Ã­conos de marca â€” SVGs propios para FB e IG */
 function FacebookIcon({ size = 10 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
@@ -34,7 +34,7 @@ export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md'
 }
 
 export function StagePill({ stage }: { stage: Stage }) {
-  const m = STAGE_META[stage]
+  const m = STAGE_META[stage] || { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300', label: 'Etapa' }
   const label = useApp((s) => s.stageLabels[stage]) ?? m.label
   return (
     <span className={`${m.bg} ${m.text} inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap`}>
@@ -43,9 +43,9 @@ export function StagePill({ stage }: { stage: Stage }) {
   )
 }
 
-/** Pill de etapa interactiva — click abre el selector y cambia la etapa ahí mismo */
+/** Pill de etapa interactiva â€” click abre el selector y cambia la etapa ahÃ­ mismo */
 export function StageSelect({ value, onChange }: { value: Stage; onChange: (s: Stage) => void }) {
-  const m = STAGE_META[value]
+  const m = STAGE_META[value] || { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300', label: 'Etapa' }
   const labels = useApp((s) => s.stageLabels)
   return (
     <div className={`${m.bg} ${m.text} relative inline-flex items-center rounded-full transition-colors`} title="Cambiar etapa">
@@ -64,7 +64,7 @@ export function StageSelect({ value, onChange }: { value: Stage; onChange: (s: S
 }
 
 export function TempBadge({ temp }: { temp: Temperature }) {
-  const m = TEMP_META[temp]
+  const m = TEMP_META[temp] || { bg: 'bg-slate-100', text: 'text-slate-700', icon: '❓', label: 'Desconocido' }
   return (
     <span className={`${m.bg} ${m.text} inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap`}>
       <span>{m.icon}</span> {m.label}
@@ -92,7 +92,7 @@ const CHANNEL_STYLE: Record<Channel, { bg: string; Icon: React.ComponentType<{ s
 }
 
 export function ChannelDot({ channel, size = 16 }: { channel: Channel; size?: number }) {
-  const { bg, Icon } = CHANNEL_STYLE[channel]
+  const { bg, Icon } = CHANNEL_STYLE[channel] || { bg: 'bg-slate-300', Icon: MessageCircle }
   return (
     <span className={`${bg} inline-flex items-center justify-center rounded-full text-inverse`} style={{ width: size, height: size }}>
       <Icon size={size * 0.62} />
@@ -107,3 +107,6 @@ export const CHANNEL_LABEL: Record<Channel, string> = {
 export function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <div className={`rounded-xl border border-line bg-app ${className}`}>{children}</div>
 }
+
+
+

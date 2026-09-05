@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+﻿import { useRef, useState } from 'react'
 import { Plus, Columns3, Filter, Search, FileSpreadsheet } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { STAGE_META, TEMP_META } from '@/lib/data/mock'
@@ -9,7 +9,7 @@ type Col = { key: keyof Lead | 'notas'; label: string; width: string }
 const COLS: Col[] = [
   { key: 'name', label: 'Nombre', width: 'min-w-40' },
   { key: 'company', label: 'Empresa', width: 'min-w-40' },
-  { key: 'phone', label: 'Teléfono', width: 'min-w-32' },
+  { key: 'phone', label: 'TelÃ©fono', width: 'min-w-32' },
   { key: 'stage', label: 'Etapa', width: 'min-w-32' },
   { key: 'value', label: 'Valor $', width: 'min-w-28' },
   { key: 'temperature', label: 'Temperatura', width: 'min-w-32' },
@@ -128,11 +128,11 @@ export default function ExcelView() {
 
                   let content: React.ReactNode = String(l[c.key as keyof Lead] ?? '')
                   if (c.key === 'stage') {
-                    const m = STAGE_META[l.stage]
+                    const m = STAGE_META[l.stage] || { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300', label: 'Etapa' }
                     content = <span className={`${m.bg} ${m.text} rounded-full px-2 py-0.5 text-xs font-semibold`}>{stageLabels[l.stage] ?? m.label}</span>
                   }
                   if (c.key === 'temperature') {
-                    const m = TEMP_META[l.temperature]
+                    const m = TEMP_META[l.temperature] || { bg: 'bg-slate-100', text: 'text-slate-700', icon: '❓', label: 'Desconocido' }
                     content = <span className={`${m.bg} ${m.text} rounded-full px-2 py-0.5 text-xs font-semibold`}>{m.icon} {m.label}</span>
                   }
                   if (c.key === 'value') content = <span className="font-semibold">${l.value.toLocaleString()}</span>
@@ -140,7 +140,7 @@ export default function ExcelView() {
                   if (c.key === 'notas') {
                     const n = lastNote(l.id)
                     content = n
-                      ? <span className="text-xs text-ink-soft italic">{n.length > 38 ? n.slice(0, 38) + '…' : n}</span>
+                      ? <span className="text-xs text-ink-soft italic">{n.length > 38 ? n.slice(0, 38) + 'â€¦' : n}</span>
                       : <span className="text-xs text-ink-soft/40 italic">Click para agregar nota</span>
                   }
 
@@ -157,13 +157,13 @@ export default function ExcelView() {
               </tr>
             ))}
 
-            {/* Fila vacía de alta rápida */}
+            {/* Fila vacÃ­a de alta rÃ¡pida */}
             <tr className="bg-soft/40">
               <td className={`${cellBase} bg-soft text-center text-xs font-semibold text-ink-soft`}>{leads.length + 1}</td>
               <td className={`${cellBase} p-0`} colSpan={COLS.length}>
                 <input
                   ref={newRowName}
-                  placeholder="Nuevo lead… escribe el nombre y presiona Enter"
+                  placeholder="Nuevo leadâ€¦ escribe el nombre y presiona Enter"
                   onKeyDown={(e) => {
                     const v = (e.target as HTMLInputElement).value.trim()
                     if (e.key === 'Enter' && v) {
@@ -178,7 +178,9 @@ export default function ExcelView() {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-ink-soft/60">Click en cualquier celda para editar en línea · Enter guarda · Esc cancela · La celda de notas abre el panel lateral</p>
+      <p className="mt-2 text-xs text-ink-soft/60">Click en cualquier celda para editar en lÃ­nea Â· Enter guarda Â· Esc cancela Â· La celda de notas abre el panel lateral</p>
     </div>
   )
 }
+
+

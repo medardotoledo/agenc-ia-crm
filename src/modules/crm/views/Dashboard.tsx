@@ -1,13 +1,13 @@
-import { Users, DollarSign, Target, Flame, Phone, MessageCircle, Mail as MailIcon, UserPlus } from 'lucide-react'
+﻿import { Users, DollarSign, Target, Flame, Phone, MessageCircle, Mail as MailIcon, UserPlus } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Card } from '@/modules/crm/components/ui'
 import { STAGE_META, money } from '@/lib/data/mock'
 import type { Stage } from '@/types'
 
 /**
- * Dashboard del CRM — métricas REALES calculadas desde los leads cargados
- * de la subcuenta activa. No se muestran datos que aún no tenemos
- * (histórico semanal, ranking de equipo, tareas) para evitar cifras falsas.
+ * Dashboard del CRM â€” mÃ©tricas REALES calculadas desde los leads cargados
+ * de la subcuenta activa. No se muestran datos que aÃºn no tenemos
+ * (histÃ³rico semanal, ranking de equipo, tareas) para evitar cifras falsas.
  */
 
 function Metric({ Icon, label, value }: { Icon: typeof Users; label: string; value: string }) {
@@ -32,7 +32,7 @@ export default function Dashboard() {
   const { leads } = useLeads()
   const firstName = (me?.name ?? 'Usuario').split(' ')[0]
 
-  // ---- Métricas reales ----
+  // ---- MÃ©tricas reales ----
   const total = leads.length
   const pipelineValue = leads.reduce((a, l) => a + (l.value || 0), 0)
   const hot = leads.filter((l) => l.temperature === 'hot').length
@@ -56,7 +56,7 @@ export default function Dashboard() {
         <p className="text-sm text-ink-soft">Resumen de tu pipeline</p>
       </div>
 
-      {/* Métricas */}
+      {/* MÃ©tricas */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Metric Icon={Users} label="Total leads" value={String(total)} />
         <Metric Icon={DollarSign} label="Valor del pipeline" value={money(pipelineValue).replace(',000', 'k')} />
@@ -71,9 +71,9 @@ export default function Dashboard() {
           <div className="space-y-3">
             {stageCounts.map(({ stage, count }) => (
               <div key={stage} className="flex items-center gap-3">
-                <span className="w-24 text-xs text-ink-soft">{stageLabels[stage] ?? STAGE_META[stage].label}</span>
+                <span className="w-24 text-xs text-ink-soft">{stageLabels[stage] ?? (STAGE_META[stage]?.label || 'Etapa')}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-line-soft">
-                  <div className={`h-full rounded-full ${STAGE_META[stage].bar}`} style={{ width: `${(count / maxStage) * 100}%` }} />
+                  <div className={`h-full rounded-full ${(STAGE_META[stage]?.bar || 'bg-slate-300')}`} style={{ width: `${(count / maxStage) * 100}%` }} />
                 </div>
                 <span className="w-8 text-right text-sm font-bold">{count}</span>
               </div>
@@ -85,7 +85,7 @@ export default function Dashboard() {
         <Card className="p-5">
           <h2 className="mb-4 font-bold">Leads por fuente</h2>
           {sources.length === 0 ? (
-            <p className="text-sm text-ink-soft">Aún no hay leads.</p>
+            <p className="text-sm text-ink-soft">AÃºn no hay leads.</p>
           ) : (
             <div className="space-y-2">
               {sources.map((s) => (
@@ -104,7 +104,7 @@ export default function Dashboard() {
       <Card className="p-5">
         <h2 className="mb-4 font-bold">Actividad reciente</h2>
         {notes.length === 0 ? (
-          <p className="text-sm text-ink-soft">Sin actividad todavía.</p>
+          <p className="text-sm text-ink-soft">Sin actividad todavÃ­a.</p>
         ) : (
           <div className="space-y-4">
             {notes.slice(0, 6).map((n) => {
@@ -117,7 +117,7 @@ export default function Dashboard() {
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{n.content}</p>
-                    <p className="text-xs text-ink-soft">{n.createdAt} · {n.author}</p>
+                    <p className="text-xs text-ink-soft">{n.createdAt} Â· {n.author}</p>
                   </div>
                 </div>
               )
@@ -128,3 +128,4 @@ export default function Dashboard() {
     </div>
   )
 }
+
