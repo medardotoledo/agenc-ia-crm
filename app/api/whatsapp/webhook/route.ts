@@ -1,3 +1,4 @@
+﻿export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
@@ -7,118 +8,152 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-export async function POST(req: Request) {
+async function getGHLToken(accountId: string): Promise<string> {
   try {
-    const body = await req.json();
-    console.log('[Webhook] Received:', JSON.stringify(body, null, 2));
-
-    const { event, instance, data, sender } = body;
-
-    // Solo procesar nuevos mensajes
-    if (event !== 'messages.upsert' && event !== 'MESSAGES_UPSERT') {
-      return NextResponse.json({ received: true });
-    }
-
-    // Asegurarse de que venga de una subcuenta de GHL
-    if (!instance || !instance.startsWith('sub_')) {
-      return NextResponse.json({ received: true });
-    }
-
-    const accountId = instance.replace('sub_', '').replace(/_/g, '-');
-    const messageData = data?.message || data;
-    
-    // Ignorar mensajes enviados por nosotros mismos (outbound)
-    if (messageData?.key?.fromMe) {
-      return NextResponse.json({ received: true });
-    }
-
-    const remoteJid = messageData?.key?.remoteJid || sender;
-    if (!remoteJid || remoteJid.includes('@g.us')) {
-       return NextResponse.json({ received: true }); // Ignorar grupos
-    }
-
-    const phone = remoteJid.split('@')[0];
-    const textContent = messageData?.message?.conversation || 
-                        messageData?.message?.extendedTextMessage?.text || 
-                        '';
-
-    if (!textContent) {
-      return NextResponse.json({ received: true });
-    }
-
-    const senderName = messageData?.pushName || 'WhatsApp Contact';
-
-    // 1. Obtener Token de GHL desde PostgreSQL local
     const client = await pool.connect();
-    let ghlToken;
     try {
-      const result = await client.query('SELECT access_token FROM ghl_installations WHERE location_id = $1', [accountId]);
-      if (result.rows.length > 0) {
-        ghlToken = result.rows[0].access_token;
+      const result = await client.query(
+        'SELECT access_token FROM ghl_installations WHERE location_id = $1 LIMIT 1;',
+        [accountId]
+      );
+      if (result.rows.length > 0 && result.rows[0].access_token) {
+        return result.rows[0].access_token;
       }
-    } catch (e: any) {
-      // Ignorar error si la tabla aún no existe (se creará en el callback)
-      if (e.code !== '42P01') throw e; 
     } finally {
       client.release();
     }
+  } catch (err: any) {
+    console.warn('[Webhook] DB Query warning:', err.message);
+  }
+  return process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966';
+}
 
-    if (!ghlToken) {
-      console.log(`[Webhook] No GHL token found for location ${accountId}`);
-      return NextResponse.json({ success: false, reason: 'No token' });
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    console.log('[Webhook WA] Event received:', body.event, 'Instance:', body.instance);
+
+    const { event, instance, data } = body;
+
+    // Solo procesar nuevos mensajes
+    const isUpsert = event === 'messages.upsert' || event === 'MESSAGES_UPSERT';
+    if (!isUpsert) {
+      return NextResponse.json({ received: true, ignored: 'not_upsert' });
     }
 
-    // 2. Inyección a GoHighLevel
-    const ghlHeaders = { 
-      'Authorization': `Bearer ${ghlToken}`, 
-      'Content-Type': 'application/json', 
-      'Version': '2021-04-15' 
+    // Extraer datos del mensaje según estructura de Evolution API v1 o v2
+    const key = data?.key || body.key;
+    const message = data?.message || body.message;
+
+    // Ignorar mensajes salientes enviados por nosotros mismos
+    if (key?.fromMe) {
+      return NextResponse.json({ received: true, ignored: 'from_me' });
+    }
+
+    const remoteJid = key?.remoteJid || body.sender || data?.sender;
+    if (!remoteJid || remoteJid.includes('@g.us')) {
+      return NextResponse.json({ received: true, ignored: 'group_or_no_jid' });
+    }
+
+    // Extraer texto del mensaje
+    const textContent =
+      message?.conversation ||
+      message?.extendedTextMessage?.text ||
+      message?.imageMessage?.caption ||
+      message?.videoMessage?.caption ||
+      message?.documentMessage?.caption ||
+      '';
+
+    if (!textContent) {
+      return NextResponse.json({ received: true, ignored: 'no_text' });
+    }
+
+    const senderName = data?.pushName || body.pushName || 'WhatsApp Contact';
+    const rawPhone = remoteJid.replace(/@.*$/, '').replace(/\D/g, '');
+
+    // Extraer subcuenta / locationId
+    let accountId = 'OS9czz85LUvBeljk8FEv';
+    if (instance && instance.startsWith('sub_')) {
+      accountId = instance.replace('sub_', '');
+    }
+
+    // 1. Obtener Token de GoHighLevel
+    const ghlToken = await getGHLToken(accountId);
+    const ghlHeaders = {
+      Authorization: `Bearer ${ghlToken}`,
+      'Content-Type': 'application/json',
+      Version: '2021-04-15',
     };
 
-    let ghlContactId = null;
-    
-    // Buscar contacto en GHL
-    const searchRes = await fetch(`https://services.leadconnectorhq.com/contacts/?query=${phone}&locationId=${accountId}`, { headers: ghlHeaders });
-    if (searchRes.ok) {
-      const searchData = await searchRes.json();
-      if (searchData.contacts && searchData.contacts.length > 0) {
-        ghlContactId = searchData.contacts[0].id;
+    let ghlContactId: string | null = null;
+
+    // 2. Buscar contacto en GHL con el número en formato internacional (+52...)
+    const phoneWithPlus = `+${rawPhone}`;
+    const searchUrl1 = `https://services.leadconnectorhq.com/contacts/?query=${encodeURIComponent(phoneWithPlus)}&locationId=${accountId}`;
+    const searchRes1 = await fetch(searchUrl1, { headers: ghlHeaders });
+
+    if (searchRes1.ok) {
+      const searchData1 = await searchRes1.json();
+      if (searchData1.contacts && searchData1.contacts.length > 0) {
+        ghlContactId = searchData1.contacts[0].id;
       }
     }
-    
-    // Si no existe, crearlo en GHL
+
+    // Fallback: si en México tiene el '1' (ej: +521...) o no lo tiene (+52...)
+    if (!ghlContactId && phoneWithPlus.startsWith('+521')) {
+      const altPhone = `+52${phoneWithPlus.slice(4)}`;
+      const searchUrl2 = `https://services.leadconnectorhq.com/contacts/?query=${encodeURIComponent(altPhone)}&locationId=${accountId}`;
+      const searchRes2 = await fetch(searchUrl2, { headers: ghlHeaders });
+      if (searchRes2.ok) {
+        const searchData2 = await searchRes2.json();
+        if (searchData2.contacts && searchData2.contacts.length > 0) {
+          ghlContactId = searchData2.contacts[0].id;
+        }
+      }
+    }
+
+    // 3. Si aún no existe en GHL, crearlo automáticamente
     if (!ghlContactId) {
-      const createRes = await fetch(`https://services.leadconnectorhq.com/contacts/`, {
-        method: 'POST', 
-        headers: ghlHeaders, 
-        body: JSON.stringify({ 
-          name: senderName, 
-          phone: `+${phone}`, 
-          locationId: accountId 
-        })
+      const createRes = await fetch('https://services.leadconnectorhq.com/contacts/', {
+        method: 'POST',
+        headers: ghlHeaders,
+        body: JSON.stringify({
+          name: senderName,
+          phone: phoneWithPlus,
+          locationId: accountId,
+        }),
       });
+
       if (createRes.ok) {
         const createData = await createRes.json();
         ghlContactId = createData.contact?.id;
+      } else {
+        const errText = await createRes.text();
+        console.warn('[Webhook WA] Contact creation failed:', errText);
       }
     }
 
-    // Inyectar el mensaje en la conversación de GHL
+    // 4. Inyectar el mensaje en la conversación de GHL
     if (ghlContactId) {
-      await fetch(`https://services.leadconnectorhq.com/conversations/messages/inbound`, {
-        method: 'POST', 
-        headers: ghlHeaders, 
-        body: JSON.stringify({ 
-          type: 'Custom', 
-          contactId: ghlContactId, 
-          body: textContent 
-        })
+      const inboundRes = await fetch('https://services.leadconnectorhq.com/conversations/messages/inbound', {
+        method: 'POST',
+        headers: ghlHeaders,
+        body: JSON.stringify({
+          type: 'WhatsApp',
+          contactId: ghlContactId,
+          message: textContent,
+          body: textContent,
+        }),
       });
+
+      const inboundData = await inboundRes.json().catch(() => ({}));
+      console.log('[Webhook WA] Message injected into GHL:', inboundData);
+      return NextResponse.json({ success: true, contactId: ghlContactId, message: inboundData });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: false, reason: 'Could not resolve contact' });
   } catch (error: any) {
-    console.error('[Webhook] Error:', error);
+    console.error('[Webhook WA] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
