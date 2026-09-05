@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import type { Section, ViewMode, NoteType, Note, Message, Conversation, Lead, Stage } from '@/types';
 import * as db from '@/lib/db';
 
@@ -119,7 +119,7 @@ export const useApp = create<AppState>((set, get) => ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            instanceName: `sub_${ctx.accountId.replace(/-/g, '_')}`,
+            instanceName: `wa_${ctx.accountId.replace(/[^a-zA-Z0-9]/g, '_')}`,
             number: lead.phone.replace(/\D/g, ''),
             text: body,
           })

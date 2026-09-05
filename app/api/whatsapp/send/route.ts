@@ -6,7 +6,15 @@ const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { instanceName, number, text } = body;
+    let { instanceName, number, text, accountId } = body;
+
+    if (!instanceName && accountId) {
+      instanceName = `wa_${accountId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    }
+    if (instanceName && instanceName.startsWith('sub_')) {
+      // Intentar primero con la convención nueva wa_
+      instanceName = instanceName.replace('sub_', 'wa_');
+    }
 
     if (!instanceName || !number || !text) {
       return NextResponse.json({ error: 'Faltan parametros' }, { status: 400 });

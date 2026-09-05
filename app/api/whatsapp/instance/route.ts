@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://2.24.65.127:8085';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'agencia_secret_wa_key_2026';
@@ -48,14 +48,19 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get('accountId') || 'default-account';
-    const instanceName = `sub_${accountId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const instanceName = `wa_${accountId.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
-    // 1. Consultar estado de la instancia
+    // 1. Consultar estado real de la instancia con fetchInstances
     try {
-      const statusRes = await fetchEvolution(`/instance/connectionState/${instanceName}`);
-      if (statusRes.ok) {
-        const statusData = await statusRes.json();
-        if (statusData?.instance?.state === 'open') {
+      const fetchRes = await fetchEvolution(`/instance/fetchInstances?instanceName=${instanceName}`);
+      if (fetchRes.ok) {
+        const list = await fetchRes.json();
+        const inst = Array.isArray(list) ? list.find((i: any) => i.name === instanceName) : list;
+
+        // Verificar si fue desconectado desde el teléfono
+        const isLoggedOut = inst?.disconnectionReasonCode === 401 || !!inst?.disconnectionAt;
+
+        if (inst && inst.connectionStatus === 'open' && !isLoggedOut) {
           // Asegurar que el webhook esté configurado
           await fetchEvolution(`/webhook/set/${instanceName}`, {
             method: 'POST',
@@ -65,15 +70,15 @@ export async function GET(request: NextRequest) {
                 url: 'https://app.crmagentico.online/api/whatsapp/webhook',
                 byEvents: false,
                 base64: false,
-                events: ['MESSAGES_UPSERT']
-              }
-            })
-          }).catch(e => console.warn('Failed to set webhook:', e));
+                events: ['MESSAGES_UPSERT'],
+              },
+            }),
+          }).catch((e) => console.warn('Failed to set webhook:', e));
 
           return NextResponse.json({
             status: 'connected',
             instanceName,
-            state: statusData.instance.state,
+            state: 'open',
           });
         }
       }
@@ -81,7 +86,7 @@ export async function GET(request: NextRequest) {
       // Continuar si la instancia no existe aún
     }
 
-    // 2. Si no está conectada, obtener QR Code para vincular
+    // 2. Si no está conectada o está desautenticada, obtener QR Code para vincular
     try {
       const connectRes = await fetchEvolution(`/instance/connect/${instanceName}`);
       if (connectRes.ok) {
@@ -114,7 +119,7 @@ export async function GET(request: NextRequest) {
 
       if (createRes.ok) {
         const createData = await createRes.json();
-        
+
         // Configurar webhook al crear
         await fetchEvolution(`/webhook/set/${instanceName}`, {
           method: 'POST',
@@ -124,10 +129,10 @@ export async function GET(request: NextRequest) {
               url: 'https://app.crmagentico.online/api/whatsapp/webhook',
               byEvents: false,
               base64: false,
-              events: ['MESSAGES_UPSERT']
-            }
-          })
-        }).catch(e => console.warn('Failed to set webhook:', e));
+              events: ['MESSAGES_UPSERT'],
+            },
+          }),
+        }).catch((e) => console.warn('Failed to set webhook:', e));
 
         const qr = createData?.qrcode?.base64 || createData?.hash?.base64 || createData?.base64;
         if (qr) {
@@ -165,7 +170,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const accountId = searchParams.get('accountId') || 'default-account';
-    const instanceName = `sub_${accountId.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const instanceName = `wa_${accountId.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
     try {
       await fetchEvolution(`/instance/logout/${instanceName}`, { method: 'DELETE' });

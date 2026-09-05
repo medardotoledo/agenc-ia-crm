@@ -1,4 +1,4 @@
-﻿export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
@@ -73,8 +73,8 @@ export async function POST(req: Request) {
 
     // Extraer subcuenta / locationId
     let accountId = 'OS9czz85LUvBeljk8FEv';
-    if (instance && instance.startsWith('sub_')) {
-      accountId = instance.replace('sub_', '');
+    if (instance) {
+      accountId = instance.replace(/^(sub_|wa_)/, '');
     }
 
     // 1. Obtener Token de GoHighLevel

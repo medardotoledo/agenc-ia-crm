@@ -121,7 +121,7 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      instanceName: `sub_${effectiveId.replace(/-/g, '_')}`,
+                      instanceName: `wa_${effectiveId.replace(/[^a-zA-Z0-9]/g, '_')}`,
                       number: phone,
                       text: '¡Hola! Este es un mensaje de prueba desde CRM Agentico. 🤖✨'
                     })
