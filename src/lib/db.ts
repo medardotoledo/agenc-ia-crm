@@ -17,7 +17,7 @@ let stageIdByKey: Record<string, string> = {}
 let keyByStageId: Record<string, string> = {}
 
 /** Pipeline por defecto de la cuenta (is_default, o el primero). */
-export async function getDefaultPipeline(accountId: string): Promise<string | null> { return null; }
+export async function getDefaultPipeline(accountId: string): Promise<string | null> { return 'ghl-pipeline'; }
 
 // Carga las etapas de la cuenta y devuelve sus NOMBRES por clave de posiciÃƒÂ³n
 // (ej: { nuevo: 'Prospecto', contactado: 'Contactado', ... }) para que la UI
@@ -232,6 +232,9 @@ export async function persistMessage(accountId: string, userId: string, lead: Le
       .update({ last_message_at: new Date().toISOString(), last_message_preview: body.slice(0, 60) })
       .eq('id', convo.id)
 }
+
+
+
 
 
 
