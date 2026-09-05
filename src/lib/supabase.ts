@@ -1,23 +1,23 @@
-// ════════════════════════════════════════════════════════════════
+﻿// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SUPABASE CLIENT CONFIGURATION
-// ════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
 
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Server-side client (API routes, server components)
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function createServerSupabaseClient() {
   return createClient(url || '', key || '');
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Browser client (React components) — SINGLETON
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Browser client (React components) â€” SINGLETON
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 let browserClient: ReturnType<typeof createClient> | null = null;
 
@@ -36,7 +36,7 @@ export function createBrowserSupabaseClient() {
       auth: {
         persistSession: true,
         detectSessionInUrl: true,
-        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        storage: (function() { try { return typeof window !== 'undefined' ? window.localStorage : undefined; } catch(e) { return undefined; } })(),
         autoRefreshToken: true,
       },
     });
@@ -45,29 +45,29 @@ export function createBrowserSupabaseClient() {
   return browserClient;
 }
 
-// Alias corto para evitar crear múltiples instancias
+// Alias corto para evitar crear mÃºltiples instancias
 export function getSupabaseBrowser() {
   return createBrowserSupabaseClient();
 }
 
-// NOTA: se eliminó el `export const supabase` a nivel de módulo. Creaba una
+// NOTA: se eliminÃ³ el `export const supabase` a nivel de mÃ³dulo. Creaba una
 // SEGUNDA instancia de GoTrueClient sobre el mismo storage key (warning
-// "Multiple GoTrueClient instances"). Todo el código usa ahora el singleton
+// "Multiple GoTrueClient instances"). Todo el cÃ³digo usa ahora el singleton
 // `createBrowserSupabaseClient()` o `createServerSupabaseClient()`.
 
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Constantes DEMO del CRM original (datos de ejemplo de leads/kanban)
-// Se perdieron en la migración Vite → Next; se restauran para que
+// Se perdieron en la migraciÃ³n Vite â†’ Next; se restauran para que
 // la capa de datos del CRM (src/lib/db.ts) compile.
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const DEMO_ACCOUNT = 'a0000000-0000-0000-0000-000000000001'; // Equipo Rankers
 export const DEMO_USER = '00000000-0000-0000-0000-0000000000a1';
 export const DEMO_PIPELINE = '00000000-0000-0000-0000-0000000000b1';
 
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Type-safe getters
-// ─────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function getAccountFromAuth(supabaseClient: ReturnType<typeof createClient>) {
   const {
@@ -163,3 +163,4 @@ export async function getLeadsByAccount(
   if (error) throw error;
   return data;
 }
+
