@@ -1,19 +1,26 @@
-export const dynamic = 'force-dynamic';
+﻿export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { Pool } from 'pg';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const cookieStore = await cookies();
-    let locationId = 'OS9czz85LUvBeljk8FEv';
+    let locationId = searchParams.get('locationId') || searchParams.get('location_id') || 'OS9czz85LUvBeljk8FEv';
     let pipelineId = searchParams.get('pipelineId');
 
     if (!locationId) {
       return NextResponse.json({ error: 'Falta locationId' }, { status: 400 });
     }
 
-    const accessToken = process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966';
+    const { rows } = await pool.query('SELECT access_token FROM ghl_installations WHERE location_id = $1 LIMIT 1;', [locationId]);
+    if (!rows.length || !rows[0].access_token) {
+      return NextResponse.json({ error: 'No se configurÃ³ el API Key de GoHighLevel para esta subcuenta.' }, { status: 401 });
+    }
+    const accessToken = rows[0].access_token;
 
     // GHL Search Opportunities API (can filter by pipelineId)
         let url = `https://services.leadconnectorhq.com/opportunities/search?location_id=${locationId}${pipelineId ? `&pipeline_id=${pipelineId}` : ''}&limit=100`;
@@ -54,6 +61,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+
 
 
 

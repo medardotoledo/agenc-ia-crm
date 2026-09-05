@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     // Leer el location_id de la URL o de la cookie (por seguridad)
     const cookieStore = await cookies();
-    let locationId = 'OS9czz85LUvBeljk8FEv';
+    let locationId = searchParams.get('locationId') || searchParams.get('location_id') || 'OS9czz85LUvBeljk8FEv';
 
     if (!locationId) {
       return NextResponse.json({ error: 'Falta locationId' }, { status: 400 });
@@ -70,5 +70,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 
 

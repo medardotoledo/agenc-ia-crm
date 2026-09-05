@@ -9,6 +9,7 @@ import { EasyBrokerSettings } from '@/modules/settings/components/EasyBrokerSett
 import { WhatsAppSettings } from '@/modules/settings/components/WhatsAppSettings';
 import { PipelineStagesSettings } from '@/modules/crm/components/PipelineStagesSettings';
 import { ProspectoStagesSettings } from '@/modules/property-management/components/ProspectoStagesSettings';
+import { GHLSettings } from '@/modules/settings/components/GHLSettings';
 import { useActiveAccount } from '@/core/account/activeAccount';
 
 export default function SettingsPage() {
@@ -70,20 +71,7 @@ export default function SettingsPage() {
               <p className="text-gray-500 text-sm italic">Próximamente...</p>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-6 opacity-50">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
-                  <span className="inline-block bg-green-100 text-green-600 px-3 py-1 rounded mr-3">
-                    💬
-                  </span>
-                  GoHighLevel
-                </h2>
-                <p className="text-sm text-gray-600 mt-2">
-                  Webhooks y formularios de contacto
-                </p>
-              </div>
-              <p className="text-gray-500 text-sm italic">Próximamente...</p>
-            </div>
+            <GHLSettings accountId={account_id} />
           </div>
         </div>
 
