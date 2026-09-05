@@ -1,11 +1,6 @@
-﻿export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import { cookies } from 'next/headers';
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 export async function GET(req: Request) {
   try {
@@ -17,14 +12,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Falta locationId' }, { status: 400 });
     }
 
-    const query = `SELECT access_token FROM ghl_installations WHERE location_id = $1 LIMIT 1;`;
-    const { rows } = await pool.query(query, [locationId]);
-
-    if (rows.length === 0 || !rows[0].access_token) {
-      return NextResponse.json({ error: 'La cuenta no ha sido conectada o falta el token.' }, { status: 401 });
-    }
-
-    const accessToken = rows[0].access_token;
+    const accessToken = process.env.GHL_API_TOKEN || 'pit-4c695ac5-0267-4c48-972a-2c6847aadad3';
 
     const ghlResponse = await fetch(`https://services.leadconnectorhq.com/opportunities/pipelines?locationId=${locationId}`, {
       method: 'GET',
@@ -48,4 +36,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 

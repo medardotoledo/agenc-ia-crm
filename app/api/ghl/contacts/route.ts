@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { cookies } from 'next/headers';
 
-// Usamos el pool global si ya existe para evitar múltiples conexiones en desarrollo
+// Usamos el pool global si ya existe para evitar mÃºltiples conexiones en desarrollo
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
     const accessToken = rows[0].access_token;
 
-    // 2. Hacer la petición a la API de GoHighLevel
+    // 2. Hacer la peticiÃ³n a la API de GoHighLevel
     // Referencia: https://highlevel.stoplight.io/docs/integrations/a5390616b9b3e-get-contacts
     const ghlResponse = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&limit=50`, {
       method: 'GET',
@@ -53,9 +53,9 @@ export async function GET(req: Request) {
       name: c.contactName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || 'Sin Nombre',
       email: c.email || null,
       phone: c.phone || null,
-      message: null, // GHL Contacts API no tiene el mensaje inicial aquí, requeriría Conversations API
+      message: null, // GHL Contacts API no tiene el mensaje inicial aquÃ­, requerirÃ­a Conversations API
       source: c.source || 'GoHighLevel',
-      status: 'new', // Esto requeriría cruzarlo con Opportunities para tener la etapa real
+      status: 'new', // Esto requerirÃ­a cruzarlo con Opportunities para tener la etapa real
       created_at: c.dateAdded,
       updated_at: c.dateUpdated,
       property_id: null,
@@ -70,3 +70,4 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
