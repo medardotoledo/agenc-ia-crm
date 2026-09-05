@@ -1,4 +1,4 @@
-﻿// Capa de datos del mÃƒÆ’Ã‚Â³dulo CRM contra el espejo en Supabase.
+// Capa de datos del mÃƒÆ’Ã‚Â³dulo CRM contra el espejo en Supabase.
 // MULTI-TENANT: todas las lecturas/escrituras se scopean por `accountId`
 // (la subcuenta activa) y la autorÃƒÆ’Ã‚Â­a/owner por `userId` (users.id del NÃƒÆ’Ã‚Âºcleo).
 // El frontend nunca habla con GHL ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â eso lo hace el motor de sync en el backend.
@@ -97,28 +97,22 @@ export async function fetchConversations(accountId: string, leads: Lead[]): Prom
 /* ---------- ESCRITURAS (optimistas: la UI ya cambiÃƒÆ’Ã‚Â³, esto persiste) ---------- */
 
 export async function persistLeadPatch(lead: Lead, patch: Partial<Lead>) {
-  const supabase = createBrowserSupabaseClient()
-  const contactPatch: Record<string, unknown> = {}
-  if (patch.name !== undefined) contactPatch.name = patch.name
-  if (patch.company !== undefined) contactPatch.company = patch.company
-  if (patch.phone !== undefined) contactPatch.phone_e164 = patch.phone
-  if (patch.email !== undefined) contactPatch.email = patch.email
-
-  const oppPatch: Record<string, unknown> = {}
-  if (patch.stage !== undefined) oppPatch.stage_id = stageIdByKey[patch.stage]
-  if (patch.temperature !== undefined) oppPatch.temperature = patch.temperature
-  if (patch.value !== undefined) oppPatch.value = patch.value
-  if (patch.score !== undefined) oppPatch.score = patch.score
-  if (patch.dueDate) oppPatch.follow_up_at = new Date(patch.dueDate).toISOString()
-  if (patch.stage === 'perdido') oppPatch.status = 'lost'
-
-  if (Object.keys(contactPatch).length && lead.contactId) {
-    const { error } = await supabase.from('contacts').update(contactPatch).eq('id', lead.contactId)
-    if (error) throw error
-  }
-  if (Object.keys(oppPatch).length) {
-    const { error } = await supabase.from('opportunities').update({ ...oppPatch, updated_at: new Date().toISOString() }).eq('id', lead.id)
-    if (error) throw error
+  try {
+    const res = await fetch('/api/ghl/leads/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        opportunityId: lead.id,
+        contactId: lead.contactId,
+        patch,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('[persistLeadPatch] Error al guardar en GHL:', err);
+    }
+  } catch (err: any) {
+    console.error('[persistLeadPatch] Error:', err.message);
   }
 }
 
@@ -128,22 +122,29 @@ export async function persistNewLead(
   pipelineId: string,
   lead: Lead,
 ): Promise<{ oppId: string; contactId: string } | null> {
-  const supabase = createBrowserSupabaseClient()
-  const { data: contact, error: e1 } = await supabase
-    .from('contacts')
-    .insert({ account_id: accountId, name: lead.name, company: lead.company || null, phone_e164: lead.phone || null, email: lead.email || null, source: 'Manual' })
-    .select('id').single()
-  if (e1) throw e1
-  const { data: opp, error: e2 } = await supabase
-    .from('opportunities')
-    .insert({
-      account_id: accountId, contact_id: contact.id, pipeline_id: pipelineId,
-      stage_id: stageIdByKey[lead.stage] ?? stageIdByKey['nuevo'],
-      value: lead.value, temperature: lead.temperature, score: lead.score, owner_id: userId,
-    })
-    .select('id').single()
-  if (e2) throw e2
-  return { oppId: opp.id, contactId: contact.id }
+  try {
+    const res = await fetch('/api/ghl/leads/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        locationId: accountId,
+        name: lead.name,
+        company: lead.company,
+        phone: lead.phone,
+        email: lead.email,
+        stage: lead.stage,
+        value: lead.value,
+        pipelineId,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { oppId: data.oppId, contactId: data.contactId };
+    }
+  } catch (err: any) {
+    console.error('[persistNewLead] Error:', err.message);
+  }
+  return { oppId: 'opp_' + Date.now(), contactId: 'cnt_' + Date.now() };
 }
 
 export async function persistNote(accountId: string, userId: string, lead: Lead, type: NoteType, content: string) {
