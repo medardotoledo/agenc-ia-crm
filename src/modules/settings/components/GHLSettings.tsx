@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { Save, Check, Key } from 'lucide-react';
@@ -12,7 +12,7 @@ export function GHLSettings({ accountId }: { accountId: string }) {
   useEffect(() => {
     if (!accountId) return;
     setLoading(true);
-    fetch(/api/settings/ghl?location_id= + accountId)
+    fetch(`/api/settings/ghl?location_id=${accountId}`)
       .then(res => res.json())
       .then(data => {
         if (data.token) setToken(data.token);
