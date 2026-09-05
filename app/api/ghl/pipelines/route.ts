@@ -6,7 +6,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const cookieStore = await cookies();
-    let locationId = searchParams.get('locationId') || cookieStore.get('ghl_location_id')?.value;
+    let locationId = 'OS9czz85LUvBeljk8FEv';
 
     if (!locationId) {
       return NextResponse.json({ error: 'Falta locationId' }, { status: 400 });
@@ -36,6 +36,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
 
 
 
