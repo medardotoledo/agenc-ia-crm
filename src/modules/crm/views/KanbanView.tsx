@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { Plus, CalendarDays, Zap, Clock } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, ChannelDot } from '@/modules/crm/components/ui'
@@ -89,7 +89,7 @@ export default function KanbanView() {
   }
 
   return (
-    <div className="animate-rise flex h-full gap-4 overflow-x-auto p-4 lg:p-6">
+    <div className="animate-rise flex h-[calc(100vh-185px)] min-h-[520px] gap-4 overflow-x-auto pb-2">
       {STAGES.map((stage) => {
         const items = leads.filter((l) => l.stage === stage)
         const label = stageLabels[stage] || stage
@@ -99,14 +99,19 @@ export default function KanbanView() {
             onDragOver={(e) => { e.preventDefault(); setOverStage(stage) }}
             onDragLeave={() => setOverStage(null)}
             onDrop={() => drop(stage)}
-            className={`flex w-64 shrink-0 flex-col rounded-xl transition-colors ${overStage === stage ? 'bg-stage-new-bg/40' : ''}`}
+            className={`flex w-72 shrink-0 flex-col rounded-xl transition-colors ${overStage === stage ? 'bg-stage-new-bg/40' : ''}`}
           >
-            <div className="h-1.5 rounded-full bg-primary" />
-            <div className="flex items-center justify-between px-1 py-3">
-              <span className="text-xs font-bold tracking-[0.12em] text-ink-soft uppercase">{label}</span>
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-line-soft text-[11px] font-bold text-ink-soft">{items.length}</span>
+            {/* Header fijo de la columna */}
+            <div className="shrink-0 pb-1">
+              <div className="h-1.5 rounded-full bg-primary" />
+              <div className="flex items-center justify-between px-1 py-3">
+                <span className="text-xs font-bold tracking-[0.12em] text-ink-soft uppercase">{label}</span>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-line-soft text-[11px] font-bold text-ink-soft">{items.length}</span>
+              </div>
             </div>
-            <div className="flex-1 space-y-2.5 overflow-y-auto pb-2">
+
+            {/* Lista de prospectos con scroll vertical propio */}
+            <div className="flex-1 space-y-2.5 overflow-y-auto pr-1 pb-2">
               {items.map((l) => (
                 <LeadCard key={l.id} lead={l} onDragStart={() => setDragId(l.id)} />
               ))}
