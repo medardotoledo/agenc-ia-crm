@@ -269,7 +269,7 @@ export function MediaLibraryModal({
                 <button
                   onClick={handleSend}
                   disabled={sending}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-wa-button py-2.5 text-xs font-bold text-white shadow-sm hover:opacity-90 transition disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white shadow-md transition disabled:opacity-50"
                 >
                   {sending ? (
                     <>
@@ -279,7 +279,7 @@ export function MediaLibraryModal({
                   ) : (
                     <>
                       <Send size={14} />
-                      <span>Enviar a {leadName}</span>
+                      <span>Enviar a {leadName} por WhatsApp</span>
                     </>
                   )}
                 </button>

@@ -438,28 +438,37 @@ export default function ConversationsView() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Preview de archivo pendiente */}
+          {/* Preview de archivo adjunto listo para enviar */}
           {pendingFile && (
-            <div className="flex items-center justify-between border-t border-line bg-soft px-4 py-2 text-xs">
+            <div className="flex items-center justify-between border-t border-b border-primary/20 bg-primary/5 px-4 py-2.5 text-xs animate-fadeIn">
               <div className="flex items-center gap-2 min-w-0">
-                {pendingFile.mediaType === 'image' ? (
-                  <ImageIcon size={16} className="text-primary shrink-0" />
-                ) : pendingFile.mediaType === 'video' ? (
-                  <Film size={16} className="text-primary shrink-0" />
-                ) : (
-                  <FileText size={16} className="text-red-500 shrink-0" />
-                )}
-                <span className="truncate font-semibold text-ink">{pendingFile.file.name}</span>
-                <span className="text-ink-soft">({(pendingFile.file.size / 1024).toFixed(0)} KB)</span>
+                <span className="flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1 font-bold text-white shadow-xs shrink-0">
+                  {pendingFile.mediaType === 'image' ? (
+                    <ImageIcon size={14} className="shrink-0" />
+                  ) : pendingFile.mediaType === 'video' ? (
+                    <Film size={14} className="shrink-0" />
+                  ) : (
+                    <FileText size={14} className="shrink-0" />
+                  )}
+                  <span>Adjunto listo:</span>
+                </span>
+                <span className="truncate font-semibold text-ink bg-app border border-line rounded-lg px-2.5 py-1 shadow-xs">
+                  📎 {pendingFile.file.name}
+                </span>
+                <span className="text-ink-soft text-[11px] font-medium shrink-0">
+                  ({(pendingFile.file.size / 1024).toFixed(0)} KB)
+                </span>
               </div>
               <button
                 onClick={() => {
                   setPendingFile(null)
                   if (fileInputRef.current) fileInputRef.current.value = ''
                 }}
-                className="rounded-lg p-1 text-ink-soft hover:bg-line hover:text-ink"
+                className="flex items-center gap-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-600 px-2 py-1 text-[11px] font-bold transition shrink-0 ml-2"
+                title="Quitar archivo adjunto"
               >
-                <X size={16} />
+                <X size={14} />
+                <span>Quitar</span>
               </button>
             </div>
           )}
