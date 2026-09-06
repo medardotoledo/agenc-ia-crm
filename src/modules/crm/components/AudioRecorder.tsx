@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Trash2, Send, AlertCircle } from 'lucide-react';
+import { Mic, Square, Trash2, Send, AlertCircle, Play, Pause } from 'lucide-react';
 
 interface AudioRecorderProps {
   onSendAudio: (audioBase64: string, durationSeconds: number) => Promise<void> | void;
@@ -11,12 +11,15 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -24,16 +27,20 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current = null;
+      }
     };
-  }, []);
+  }, [audioUrl]);
 
   const startRecording = async () => {
     setErrorMsg(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      
-      // Intentar usar audio/webm o audio/ogg o por defecto
+
       let options: MediaRecorderOptions = {};
       if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
         options = { mimeType: 'audio/webm;codecs=opus' };
@@ -53,9 +60,10 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
       };
 
       recorder.onstop = () => {
-        const mimeType = recorder.mimeType || 'audio/ogg';
+        const mimeType = recorder.mimeType || 'audio/webm';
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
         stream.getTracks().forEach((track) => track.stop());
       };
 
@@ -85,43 +93,28 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
       mediaRecorderRef.current.stop();
     }
     if (timerRef.current) clearInterval(timerRef.current);
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current = null;
+    }
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
     setIsRecording(false);
     setAudioBlob(null);
+    setAudioUrl(null);
+    setIsPlaying(false);
     setRecordingTime(0);
     setErrorMsg(null);
     if (onCancel) onCancel();
   };
 
-  const handleSend = async () => {
-    if (!audioBlob && isRecording && mediaRecorderRef.current) {
-      // Si el usuario da clic en Enviar mientras sigue grabando
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (timerRef.current) clearInterval(timerRef.current);
-
-      // Esperar brevemente a que onstop arme el blob
-      setTimeout(async () => {
-        const mimeType = mediaRecorderRef.current?.mimeType || 'audio/ogg';
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        await convertAndSend(blob);
-      }, 200);
-      return;
-    }
-
-    if (audioBlob) {
-      await convertAndSend(audioBlob);
-    }
-  };
-
-  const convertAndSend = async (blob: Blob) => {
+  const convertAndSend = async (blob: Blob, duration: number) => {
     setIsSending(true);
     try {
       const reader = new FileReader();
-      reader.readAsDataURL(blob);
       reader.onloadend = async () => {
         const base64Audio = reader.result as string;
         try {
-          await onSendAudio(base64Audio, recordingTime);
+          await onSendAudio(base64Audio, duration);
           cancelRecording();
         } catch (err: any) {
           setErrorMsg(err.message || 'Error enviando nota de voz');
@@ -129,9 +122,47 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
           setIsSending(false);
         }
       };
+      reader.readAsDataURL(blob);
     } catch (e: any) {
       setErrorMsg(e.message || 'Error procesando audio');
       setIsSending(false);
+    }
+  };
+
+  const handleSend = () => {
+    if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      const currentDuration = recordingTime;
+      mediaRecorderRef.current.addEventListener(
+        'stop',
+        () => {
+          const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+          const blob = new Blob(audioChunksRef.current, { type: mimeType });
+          convertAndSend(blob, currentDuration);
+        },
+        { once: true }
+      );
+      stopRecording();
+      return;
+    }
+
+    if (audioBlob) {
+      convertAndSend(audioBlob, recordingTime);
+    }
+  };
+
+  const togglePlayback = () => {
+    if (!audioUrl) return;
+    if (!audioElementRef.current) {
+      audioElementRef.current = new Audio(audioUrl);
+      audioElementRef.current.onended = () => setIsPlaying(false);
+    }
+
+    if (isPlaying) {
+      audioElementRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioElementRef.current.play();
+      setIsPlaying(true);
     }
   };
 
@@ -154,7 +185,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
   if (isRecording || audioBlob) {
     return (
       <div className="flex flex-1 items-center gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
-        {/* Pulsing indicator */}
+        {/* Pulsing indicator or Play button */}
         <div className="flex items-center gap-2">
           {isRecording ? (
             <span className="relative flex h-3 w-3">
@@ -162,7 +193,14 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
               <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
             </span>
           ) : (
-            <span className="h-3 w-3 rounded-full bg-emerald-500" />
+            <button
+              type="button"
+              onClick={togglePlayback}
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition"
+              title={isPlaying ? 'Pausar' : 'Escuchar audio grabado'}
+            >
+              {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
+            </button>
           )}
           <span className="font-mono text-xs font-bold text-ink">
             {formatTime(recordingTime)}
@@ -174,15 +212,19 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
           {Array.from({ length: 16 }).map((_, i) => (
             <span
               key={i}
-              className={`h-4 w-1 rounded-full ${isRecording ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-300'}`}
+              className={`h-4 w-1 rounded-full ${isRecording ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-400'}`}
               style={{
                 height: isRecording ? `${Math.max(6, ((i * 7 + recordingTime * 13) % 24))}px` : '10px',
                 animationDelay: `${(i % 5) * 120}ms`,
               }}
             />
           ))}
-          <span className="text-[11px] text-ink-soft ml-2">
-            {isRecording ? 'Grabando nota de voz...' : 'Nota lista para enviar'}
+          <span className="text-[11px] text-ink-soft ml-2 truncate">
+            {isSending
+              ? 'Enviando nota de voz...'
+              : isRecording
+              ? 'Grabando nota de voz...'
+              : 'Nota de voz lista'}
           </span>
         </div>
 
@@ -191,7 +233,8 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
           <button
             type="button"
             onClick={cancelRecording}
-            className="rounded-full p-1.5 text-ink-soft hover:bg-soft hover:text-red-600 transition"
+            disabled={isSending}
+            className="rounded-full p-1.5 text-ink-soft hover:bg-soft hover:text-red-600 transition disabled:opacity-50"
             title="Cancelar grabación"
           >
             <Trash2 size={16} />
@@ -201,8 +244,9 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
             <button
               type="button"
               onClick={stopRecording}
-              className="rounded-full bg-soft p-1.5 text-ink hover:bg-line transition"
-              title="Detener"
+              disabled={isSending}
+              className="rounded-full bg-soft p-1.5 text-ink hover:bg-line transition disabled:opacity-50"
+              title="Detener y escuchar antes de enviar"
             >
               <Square size={15} />
             </button>

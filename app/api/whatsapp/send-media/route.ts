@@ -77,18 +77,65 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Faltan parámetros requeridos (instanceName, number, media)' }, { status: 400 });
     }
 
-    // Limpieza de formato Base64 para Evolution API
-    // Evolution API rechaza data URIs como 'data:image/png;base64,...' -> requiere raw base64 o URL
+    // 1. Limpieza de formato Base64 para extraer MIME Type y Base64 puro
     let cleanMedia = media;
     let mimeType = body.mimeType || getMimeType(fileName, mediaType);
 
-    if (typeof media === 'string' && media.startsWith('data:')) {
-      const match = media.match(/^data:([^;]+);base64,(.+)$/s);
-      if (match) {
-        mimeType = match[1] || mimeType;
-        cleanMedia = match[2];
-      } else {
-        cleanMedia = media.replace(/^data:[^;]+;base64,/, '');
+    if (typeof media === 'string' && media.includes(';base64,')) {
+      const parts = media.split(';base64,');
+      cleanMedia = parts[1];
+      const header = parts[0].replace(/^data:/, '');
+      mimeType = header.split(';')[0] || mimeType;
+    } else if (typeof media === 'string' && media.startsWith('data:')) {
+      cleanMedia = media.replace(/^data:[^;]+;base64,/, '');
+    }
+
+    const effectiveAccountId = accountId || (instanceName ? instanceName.replace(/^(sub_|wa_)/, '') : 'OS9czz85LUvBeljk8FEv');
+    const ghlToken = await getGHLToken(effectiveAccountId);
+
+    // 2. Si no es una URL pública, subir el archivo a GoHighLevel CDN primero
+    // Esto garantiza tener una URL permanente y pública para Evolution API y GHL Conversations
+    let cdnUrl: string | null = null;
+    const isUrl = typeof media === 'string' && (media.startsWith('http://') || media.startsWith('https://'));
+
+    if (isUrl) {
+      cdnUrl = media;
+    } else if (cleanMedia) {
+      try {
+        const buffer = Buffer.from(cleanMedia, 'base64');
+        const blob = new Blob([buffer], { type: mimeType });
+        const form = new FormData();
+
+        let ext = 'bin';
+        if (isVoiceNote || mediaType === 'audio') ext = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('webm') ? 'webm' : 'ogg';
+        else if (mediaType === 'image') ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+        else if (mediaType === 'video') ext = 'mp4';
+        else if (mediaType === 'document') ext = 'pdf';
+
+        const effectiveName = fileName || (isVoiceNote ? `nota_voz_${Date.now()}.${ext}` : `archivo_${Date.now()}.${ext}`);
+        form.append('file', blob, effectiveName);
+        form.append('name', effectiveName);
+        form.append('altId', effectiveAccountId);
+        form.append('altType', 'location');
+
+        const upRes = await fetch('https://services.leadconnectorhq.com/medias/upload-file', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ghlToken}`,
+            Version: '2021-07-28',
+          },
+          body: form,
+        });
+
+        if (upRes.ok) {
+          const upData = await upRes.json();
+          if (upData.url) cdnUrl = upData.url;
+          console.log('[Send Media WA] Uploaded to GHL CDN successfully:', cdnUrl);
+        } else {
+          console.warn('[Send Media WA] GHL Upload returned status:', upRes.status);
+        }
+      } catch (upErr: any) {
+        console.warn('[Send Media WA] Error uploading to GHL Media:', upErr.message);
       }
     }
 
@@ -106,14 +153,11 @@ export async function POST(req: Request) {
     let actualResponse: Response | null = null;
     let lastError: any = null;
 
-    if (isVoiceNote || (mediaType === 'audio' && isVoiceNote)) {
-      // Enviar como Nota de Voz Nativa de WhatsApp (PTT)
-      const payload = {
-        number: cleanNumber,
-        audio: cleanMedia,
-        encoding: true,
-      };
+    // 3. Enviar a Evolution API
+    const mediaForEvolution = cdnUrl || cleanMedia;
 
+    if (isVoiceNote || (mediaType === 'audio' && isVoiceNote)) {
+      // Intento 1: Como Nota de Voz Nativa PTT
       for (const baseUrl of urlsToTry) {
         try {
           const response = await fetch(`${baseUrl}/message/sendWhatsAppAudio/${instanceName}`, {
@@ -122,7 +166,11 @@ export async function POST(req: Request) {
               'Content-Type': 'application/json',
               apikey: apiKey,
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+              number: cleanNumber,
+              audio: mediaForEvolution,
+              encoding: true,
+            }),
           });
           actualResponse = response;
           break;
@@ -130,14 +178,44 @@ export async function POST(req: Request) {
           lastError = e;
         }
       }
+
+      // Si falla sendWhatsAppAudio, fallback a sendMedia como audio
+      if (!actualResponse || !actualResponse.ok) {
+        console.warn('[Send Media WA] sendWhatsAppAudio failed, trying fallback sendMedia audio...');
+        for (const baseUrl of urlsToTry) {
+          try {
+            const fallbackResponse = await fetch(`${baseUrl}/message/sendMedia/${instanceName}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: apiKey,
+              },
+              body: JSON.stringify({
+                number: cleanNumber,
+                mediatype: 'audio',
+                mimetype: mimeType || 'audio/ogg',
+                caption: caption || '',
+                media: mediaForEvolution,
+                fileName: fileName || 'audio.ogg',
+              }),
+            });
+            if (fallbackResponse.ok) {
+              actualResponse = fallbackResponse;
+              break;
+            }
+          } catch {
+            // try next
+          }
+        }
+      }
     } else {
-      // Enviar como Archivo Multimedia (Video, Imagen, Documento, Audio)
+      // Enviar como Archivo Multimedia (Video, Imagen, Documento, Audio estándar)
       const payload = {
         number: cleanNumber,
         mediatype: mediaType,
         mimetype: mimeType,
         caption: caption || '',
-        media: cleanMedia,
+        media: mediaForEvolution,
         fileName: fileName || (mediaType === 'video' ? 'video.mp4' : mediaType === 'document' ? 'document.pdf' : 'archivo'),
       };
 
@@ -169,11 +247,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: resData?.response?.message || resData?.message || 'Error from WhatsApp API' }, { status: actualResponse.status });
     }
 
-    // Inyectar en GoHighLevel para reflejar la multimedia en el hilo de conversación
+    // 4. Inyectar en GoHighLevel para reflejar la multimedia en el hilo de conversación
     try {
       let ghlContactId = contactId;
-      const effectiveAccountId = accountId || (instanceName ? instanceName.replace(/^(sub_|wa_)/, '') : 'OS9czz85LUvBeljk8FEv');
-      const ghlToken = await getGHLToken(effectiveAccountId);
       const ghlHeaders = {
         Authorization: `Bearer ${ghlToken}`,
         'Content-Type': 'application/json',
@@ -191,46 +267,11 @@ export async function POST(req: Request) {
       }
 
       if (ghlContactId) {
-        let cdnUrl: string | null = null;
-        const isUrl = typeof media === 'string' && (media.startsWith('http://') || media.startsWith('https://'));
-
-        if (isUrl) {
-          cdnUrl = media;
-        } else if (cleanMedia) {
-          // Subir archivo base64 a la biblioteca de GoHighLevel para generar URL pública compatible con GHL Conversations
-          try {
-            const buffer = Buffer.from(cleanMedia, 'base64');
-            const blob = new Blob([buffer], { type: mimeType });
-            const form = new FormData();
-            const effectiveName = fileName || (isVoiceNote ? `nota_voz_${Date.now()}.ogg` : `archivo_${Date.now()}`);
-            form.append('file', blob, effectiveName);
-            form.append('name', effectiveName);
-            form.append('altId', effectiveAccountId);
-            form.append('altType', 'location');
-
-            const upRes = await fetch('https://services.leadconnectorhq.com/medias/upload-file', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${ghlToken}`,
-                Version: '2021-07-28',
-              },
-              body: form,
-            });
-
-            if (upRes.ok) {
-              const upData = await upRes.json();
-              if (upData.url) cdnUrl = upData.url;
-            }
-          } catch (upErr: any) {
-            console.warn('[Send Media WA] Upload to GHL media error:', upErr.message);
-          }
-        }
-
         const attachments = cdnUrl ? [cdnUrl] : [];
         const displayMsg = caption
           ? `${caption} ${fileName ? `[${fileName}]` : ''}`
           : isVoiceNote
-          ? '🎤 Nota de voz'
+          ? '🎤 Nota de voz enviada'
           : fileName
           ? `📎 ${fileName}`
           : `📎 Archivo ${mediaType}`;
@@ -254,6 +295,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       result: resData,
+      cdnUrl,
     });
   } catch (error: any) {
     console.error('Error in /api/whatsapp/send-media:', error);
