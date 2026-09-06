@@ -22,23 +22,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const brainContext = brainDocs.map((b: any) => `### ${b.title}\n${b.markdown_content}`).join('\n\n');
 
-    let apiKey = '';
-    if (agent.encrypted_api_key) {
-      apiKey = Buffer.from(agent.encrypted_api_key, 'base64').toString('utf8');
-    }
+    const { rows: keyRows } = await pool.query(
+      'SELECT gemini_key, anthropic_key, openai_key FROM account_ai_keys WHERE account_id = $1 LIMIT 1;',
+      [agent.account_id || 'default']
+    );
+    const accountKeys = keyRows[0] || {};
 
     const provider = agent.llm_provider || 'google';
-    const effectiveApiKey = apiKey || (
+    const effectiveApiKey = (
       provider === 'google'
-        ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+        ? (accountKeys.gemini_key || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
         : provider === 'anthropic'
-        ? process.env.ANTHROPIC_API_KEY
-        : process.env.OPENAI_API_KEY
-    ) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.ANTHROPIC_API_KEY;
+        ? (accountKeys.anthropic_key || process.env.ANTHROPIC_API_KEY)
+        : (accountKeys.openai_key || process.env.OPENAI_API_KEY)
+    ) || (agent.encrypted_api_key ? Buffer.from(agent.encrypted_api_key, 'base64').toString('utf8') : '');
 
     if (!effectiveApiKey) {
       return NextResponse.json({
-        error: `Falta configurar la API Key para ${provider}. Ingrésala en los ajustes del agente.`,
+        error: `Falta configurar la API Key para ${provider.toUpperCase()}. Puedes ingresarla en Configuración (/admin/settings).`,
       }, { status: 400 });
     }
 

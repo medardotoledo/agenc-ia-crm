@@ -10,6 +10,7 @@ import { WhatsAppSettings } from '@/modules/settings/components/WhatsAppSettings
 import { PipelineStagesSettings } from '@/modules/crm/components/PipelineStagesSettings';
 import { ProspectoStagesSettings } from '@/modules/property-management/components/ProspectoStagesSettings';
 import { GHLSettings } from '@/modules/settings/components/GHLSettings';
+import { AiKeysSettings } from '@/modules/settings/components/AiKeysSettings';
 import { useActiveAccount } from '@/core/account/activeAccount';
 
 export default function SettingsPage() {
@@ -38,39 +39,10 @@ export default function SettingsPage() {
           <ProspectoStagesSettings />
         </div>
 
-        {/* Próximos: OpenAI, Claude, GHL */}
+        {/* Integraciones de IA & GHL */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <AiKeysSettings accountId={account_id} />
           <div className="space-y-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6 opacity-50">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
-                  <span className="inline-block bg-orange-100 text-orange-600 px-3 py-1 rounded mr-3">
-                    🔑
-                  </span>
-                  OpenAI
-                </h2>
-                <p className="text-sm text-gray-600 mt-2">
-                  Para generación IA de descripciones
-                </p>
-              </div>
-              <p className="text-gray-500 text-sm italic">Próximamente...</p>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-6 opacity-50">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
-                  <span className="inline-block bg-purple-100 text-purple-600 px-3 py-1 rounded mr-3">
-                    🧠
-                  </span>
-                  Claude (Anthropic)
-                </h2>
-                <p className="text-sm text-gray-600 mt-2">
-                  Alternativa a OpenAI
-                </p>
-              </div>
-              <p className="text-gray-500 text-sm italic">Próximamente...</p>
-            </div>
-
             <GHLSettings accountId={account_id} />
           </div>
         </div>

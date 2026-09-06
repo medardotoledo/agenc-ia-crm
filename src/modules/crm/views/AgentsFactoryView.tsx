@@ -1378,23 +1378,20 @@ export default function AgentsFactoryView() {
                         </p>
                       </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                            <Key className="w-3.5 h-3.5 text-indigo-600" />
-                            Actualizar API Key (BYOK)
-                          </label>
-                          <span className="text-[10px] text-slate-400">
-                            {selectedAgent.hasApiKey ? '🔒 Llave configurada' : 'Sin llave (usa plataforma)'}
-                          </span>
+                      <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <Key className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <div className="text-xs text-slate-700">
+                            <p className="font-semibold">Credenciales y API Keys centralizadas</p>
+                            <p className="text-slate-500 mt-0.5">Tus llaves de Gemini, Claude y OpenAI se administran en el panel de Configuración.</p>
+                          </div>
                         </div>
-                        <input
-                          type="password"
-                          value={editApiKey}
-                          onChange={(e) => setEditApiKey(e.target.value)}
-                          placeholder="Ingresa nueva llave o déjala en blanco para mantener la actual"
-                          className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
-                        />
+                        <a
+                          href="/admin/settings"
+                          className="px-3 py-1.5 rounded-lg bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 font-bold text-xs shadow-sm transition-all shrink-0 ml-3"
+                        >
+                          Ir a Configuración →
+                        </a>
                       </div>
 
                       <div className="pt-2">
@@ -1629,30 +1626,18 @@ export default function AgentsFactoryView() {
                   </p>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Key className="w-3.5 h-3.5 text-indigo-600" />
-                      3. Tu API Key Personal (Opcional - BYOK)
-                    </label>
-                    <span className="text-[10px] text-slate-400">Bring Your Own Key</span>
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Key className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Las API Keys de Gemini, Claude y OpenAI se gestionan centralizadas en <strong>Configuración</strong>.</span>
                   </div>
-                  <input
-                    type="password"
-                    value={newAgentApiKey}
-                    onChange={(e) => setNewAgentApiKey(e.target.value)}
-                    placeholder={
-                      newAgentProvider === 'google'
-                        ? 'AIzaSy... (Opcional, si la dejas vacía usa la plataforma)'
-                        : newAgentProvider === 'anthropic'
-                        ? 'sk-ant-api03-... (Opcional)'
-                        : 'sk-proj-... (Opcional)'
-                    }
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    🔒 Tu llave se almacena cifrada en base de datos.
-                  </p>
+                  <a
+                    href="/admin/settings"
+                    target="_blank"
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline shrink-0 ml-2"
+                  >
+                    Ver Configuración
+                  </a>
                 </div>
 
                 <div className="pt-3 flex items-center justify-between border-t border-slate-100">
