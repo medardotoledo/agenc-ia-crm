@@ -92,7 +92,38 @@ export async function fetchNotes(accountId: string, leads: Lead[]): Promise<Note
   return [];
 }
 
-export async function fetchConversations(accountId: string, leads: Lead[]): Promise<{ convos: Conversation[]; msgs: Message[] }> { return { convos: [], msgs: [] }; }
+export async function fetchConversations(accountId: string, leads: Lead[]): Promise<{ convos: Conversation[]; msgs: Message[] }> {
+  try {
+    const res = await fetch(`/api/ghl/conversations?locationId=${accountId}&limit=50`);
+    if (!res.ok) return { convos: [], msgs: [] };
+    const data = await res.json();
+    const rawConvos: any[] = data.conversations || [];
+
+    const convos: Conversation[] = rawConvos.map((c) => {
+      const matchedLead = leads.find(
+        (l) => l.contactId === c.contactId ||
+        (c.phone && l.phone && l.phone.replace(/\D/g, '') === c.phone.replace(/\D/g, ''))
+      );
+
+      const targetLeadId = matchedLead ? matchedLead.id : c.contactId;
+      const lastMsg = c.lastMessageBody || '';
+      const isoDate = c.lastMessageDate ? new Date(c.lastMessageDate).toISOString() : new Date().toISOString();
+
+      return {
+        leadId: targetLeadId,
+        channel: 'whatsapp',
+        preview: lastMsg.slice(0, 60),
+        time: fmtDate(isoDate),
+        unread: c.unreadCount || 0,
+      };
+    });
+
+    return { convos, msgs: [] };
+  } catch (err) {
+    console.error('Error fetching conversations in db.ts:', err);
+    return { convos: [], msgs: [] };
+  }
+}
 
 /* ---------- ESCRITURAS (optimistas: la UI ya cambiÃƒÆ’Ã‚Â³, esto persiste) ---------- */
 

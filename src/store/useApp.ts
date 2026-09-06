@@ -49,6 +49,7 @@ interface AppState {
   toggleSidebar: () => void;
   addNote: (leadId: string, type: NoteType, content: string) => void;
   sendMessage: (leadId: string, channel: Message['channel'], body: string) => void;
+  loadLeadMessages: (leadId: string, contactId?: string) => Promise<void>;
   /** Carga (o recarga) todos los datos del CRM para la subcuenta activa.
    *  Si el usuario es `agent` con `onlyAssigned`, solo ve sus propios leads. */
   loadAccountData: (
@@ -125,6 +126,39 @@ export const useApp = create<AppState>((set, get) => ({
           })
         }).catch(err => console.error('Error enviando WhatsApp:', err));
       }
+    }
+  },
+  loadLeadMessages: async (leadId: string, contactId?: string) => {
+    const ctx = get().ctx;
+    if (!ctx?.accountId) return;
+    const leads = useLeads.getState().leads;
+    const targetLead = leads.find((l) => l.id === leadId || l.contactId === leadId);
+    const effectiveContactId = contactId || targetLead?.contactId || leadId;
+
+    try {
+      const res = await fetch(`/api/ghl/conversations?locationId=${ctx.accountId}&contactId=${effectiveContactId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.messages && Array.isArray(data.messages)) {
+        const mappedMsgs: Message[] = data.messages.map((m: any) => ({
+          id: m.id,
+          leadId,
+          channel: (m.channel as Message['channel']) || 'whatsapp',
+          direction: m.direction === 'inbound' ? 'in' : 'out',
+          body: m.body || '',
+          author: m.author,
+          time: m.time || 'Ahora',
+        }));
+
+        set((s) => {
+          const otherMsgs = s.messages.filter((m) => m.leadId !== leadId);
+          return {
+            messages: [...otherMsgs, ...mappedMsgs],
+          };
+        });
+      }
+    } catch (err: any) {
+      console.error('Error in loadLeadMessages:', err);
     }
   },
   loadAccountData: async (accountId, userId, userName, role, onlyAssigned = false) => {

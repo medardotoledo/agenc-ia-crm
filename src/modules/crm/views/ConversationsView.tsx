@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Phone, User, Kanban, UserPlus, Check, Paperclip, LayoutTemplate, Sparkles, Send, Bot } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Phone, User, Kanban, UserPlus, Check, Paperclip, LayoutTemplate, Sparkles, Send, Bot, RefreshCw } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, ChannelDot, CHANNEL_LABEL } from '@/modules/crm/components/ui'
 import type { Channel } from '@/types'
@@ -21,17 +21,48 @@ const AI_MODES = [
 const REPLY_CHANNELS = ['whatsapp', 'email', 'internal'] as const
 
 export default function ConversationsView() {
-  const { activeConversationId, setActiveConversation, messages, sendMessage, openLead, conversations } = useApp()
+  const { activeConversationId, setActiveConversation, messages, sendMessage, loadLeadMessages, openLead, conversations } = useApp()
   const { leads } = useLeads()
   const [filter, setFilter] = useState<Channel | 'todos'>('todos')
   const [aiMode, setAiMode] = useState<'bot' | 'hybrid' | 'agent'>('agent')
   const [replyChannel, setReplyChannel] = useState<(typeof REPLY_CHANNELS)[number]>('whatsapp')
   const [text, setText] = useState('')
+  const [loadingChat, setLoadingChat] = useState(false)
 
   const convos = conversations.filter((c) => filter === 'todos' || c.channel === filter)
   const active = conversations.find((c) => c.leadId === activeConversationId) ?? convos[0]
-  const lead = leads.find((l) => l.id === active?.leadId)
+  const matchedLead = leads.find((l) => l.id === active?.leadId || l.contactId === active?.leadId)
+  const lead = matchedLead || (active ? {
+    id: active.leadId,
+    contactId: active.leadId,
+    name: 'Contacto WhatsApp',
+    company: '',
+    phone: '',
+    email: '',
+    stage: 'nuevo',
+    temperature: 'warm' as const,
+    value: 0,
+    score: 0,
+    ownerId: '',
+    dueDate: '',
+    channels: ['whatsapp' as const],
+    unread: 0,
+    source: 'WhatsApp',
+  } : null)
   const thread = messages.filter((m) => m.leadId === active?.leadId)
+
+  useEffect(() => {
+    if (active?.leadId) {
+      setLoadingChat(true)
+      loadLeadMessages(active.leadId, matchedLead?.contactId).finally(() => setLoadingChat(false))
+
+      const timer = setInterval(() => {
+        loadLeadMessages(active.leadId, matchedLead?.contactId)
+      }, 7000)
+
+      return () => clearInterval(timer)
+    }
+  }, [active?.leadId, matchedLead?.contactId, loadLeadMessages])
 
   const send = () => {
     if (!text.trim() || !lead) return
@@ -67,8 +98,8 @@ export default function ConversationsView() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {convos.map((c) => {
-            const l = leads.find((x) => x.id === c.leadId)
-            if (!l) return null
+            const l = leads.find((x) => x.id === c.leadId || x.contactId === c.leadId)
+            const name = l?.name || 'Contacto WhatsApp'
             const isActive = active?.leadId === c.leadId
             return (
               <button
@@ -79,12 +110,12 @@ export default function ConversationsView() {
                 }`}
               >
                 <div className="relative shrink-0">
-                  <Avatar name={l.name} />
+                  <Avatar name={name} />
                   <span className="absolute -right-0.5 -bottom-0.5"><ChannelDot channel={c.channel} size={14} /></span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="truncate text-sm font-semibold">{l.name}</p>
+                    <p className="truncate text-sm font-semibold">{name}</p>
                     <span className="shrink-0 text-[10px] text-ink-soft">{c.time}</span>
                   </div>
                   <div className="flex items-center gap-2">

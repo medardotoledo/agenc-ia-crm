@@ -266,14 +266,28 @@ function CitasTab({ lead }: { lead: Lead }) {
 }
 
 export default function LeadPanel() {
-  const { selectedLeadId, closePanel, panelTab, openLead, addNote, sendMessage, notes, messages } = useApp()
+  const { selectedLeadId, closePanel, panelTab, openLead, addNote, sendMessage, loadLeadMessages, notes, messages } = useApp()
   const { leads, updateLead } = useLeads()
   const [text, setText] = useState('')
   const [noteType, setNoteType] = useState<NoteType>('note')
   const [chatText, setChatText] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
+  const [loadingChat, setLoadingChat] = useState(false)
 
   const lead = leads.find((l) => l.id === selectedLeadId)
+
+  useEffect(() => {
+    if (lead && panelTab === 'chat') {
+      setLoadingChat(true)
+      loadLeadMessages(lead.id, lead.contactId).finally(() => setLoadingChat(false))
+
+      const timer = setInterval(() => {
+        loadLeadMessages(lead.id, lead.contactId)
+      }, 7000)
+
+      return () => clearInterval(timer)
+    }
+  }, [lead?.id, lead?.contactId, panelTab, loadLeadMessages])
   if (!lead) return null
 
   const leadNotes = notes.filter((n) => n.leadId === lead.id)
@@ -424,23 +438,50 @@ export default function LeadPanel() {
           </>
         ) : (
           <>
+            {/* Header de estado WhatsApp */}
+            <div className="flex items-center justify-between border-b border-line px-5 py-2 bg-soft/30">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[11px] font-semibold text-ink-soft">WhatsApp en vivo</span>
+              </div>
+              <button
+                onClick={() => {
+                  if (lead) {
+                    setLoadingChat(true);
+                    loadLeadMessages(lead.id, lead.contactId).finally(() => setLoadingChat(false));
+                  }
+                }}
+                className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                title="Actualizar mensajes"
+              >
+                <RefreshCw size={11} className={loadingChat ? 'animate-spin' : ''} />
+                Actualizar
+              </button>
+            </div>
+
             {/* Chat del lead */}
             <div className="flex-1 space-y-3 overflow-y-auto bg-soft/40 px-5 py-4">
-              {leadMessages.length === 0 && (
+              {loadingChat && leadMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center pt-10 text-ink-soft">
+                  <RefreshCw size={20} className="animate-spin mb-2 text-primary" />
+                  <p className="text-xs">Cargando mensajes de WhatsApp...</p>
+                </div>
+              ) : leadMessages.length === 0 ? (
                 <p className="pt-8 text-center text-sm text-ink-soft">Sin conversación todavía con este lead.</p>
-              )}
-              {leadMessages.map((m) => (
-                <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                    m.direction === 'out' ? 'rounded-br-sm bg-primary text-inverse' : 'rounded-bl-sm border border-line bg-app'
-                  }`}>
-                    {m.body}
-                    <div className={`mt-1 text-[10px] ${m.direction === 'out' ? 'text-inverse/60' : 'text-ink-soft'}`}>
-                      {m.time}{m.author ? ` — ${m.author}` : ''}
+              ) : (
+                leadMessages.map((m) => (
+                  <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                      m.direction === 'out' ? 'rounded-br-sm bg-primary text-inverse' : 'rounded-bl-sm border border-line bg-app'
+                    }`}>
+                      {m.body}
+                      <div className={`mt-1 text-[10px] ${m.direction === 'out' ? 'text-inverse/60' : 'text-ink-soft'}`}>
+                        {m.time}{m.author ? ` — ${m.author}` : ''}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
             <div className="border-t border-line px-5 py-3">
               <div className="flex items-end gap-2">

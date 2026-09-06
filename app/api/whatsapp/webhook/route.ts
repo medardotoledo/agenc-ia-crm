@@ -133,7 +133,37 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. Inyectar el mensaje en la conversación de GHL
+    // 4. Asegurar que el contacto tenga una oportunidad en el Pipeline para aparecer en el CRM Kanban
+    if (ghlContactId) {
+      try {
+        const oppSearchUrl = `https://services.leadconnectorhq.com/opportunities/search?location_id=${accountId}&contact_id=${ghlContactId}`;
+        const oppSearchRes = await fetch(oppSearchUrl, { headers: { ...ghlHeaders, Version: '2021-07-28' } });
+        if (oppSearchRes.ok) {
+          const oppSearchData = await oppSearchRes.json();
+          if (!oppSearchData.opportunities || oppSearchData.opportunities.length === 0) {
+            // No tiene oportunidad activa, crearla en la etapa inicial "Lead Nuevo"
+            await fetch('https://services.leadconnectorhq.com/opportunities/', {
+              method: 'POST',
+              headers: { ...ghlHeaders, Version: '2021-07-28' },
+              body: JSON.stringify({
+                name: senderName || phoneWithPlus,
+                pipelineId: 'czJFUMy4psgBs7tn8nE8',
+                pipelineStageId: 'e519fb0d-8e24-461e-81a6-44d9d973f21e',
+                locationId: accountId,
+                contactId: ghlContactId,
+                status: 'open',
+                monetaryValue: 0,
+              }),
+            });
+            console.log('[Webhook WA] Auto-created opportunity for contact:', ghlContactId);
+          }
+        }
+      } catch (oppErr: any) {
+        console.warn('[Webhook WA] Error checking/creating opportunity:', oppErr.message);
+      }
+    }
+
+    // 5. Inyectar el mensaje en la conversación de GHL
     if (ghlContactId) {
       const inboundRes = await fetch('https://services.leadconnectorhq.com/conversations/messages/inbound', {
         method: 'POST',
