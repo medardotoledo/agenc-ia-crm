@@ -6,63 +6,91 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+    const { scenario } = body;
 
     const { rows: agentRows } = await pool.query('SELECT * FROM ai_agents WHERE id = $1 LIMIT 1;', [id]);
-    if (!agentRows.length) return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 });
+    if (!agentRows.length) {
+      return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 });
+    }
     const agent = agentRows[0];
 
-    // Cargar documentos del Segundo Cerebro
-    const { rows: brains } = await pool.query('SELECT * FROM ai_agent_brains WHERE agent_id = $1;', [id]);
-    if (!brains.length) {
-      return NextResponse.json({ error: 'El agente aún no tiene su Segundo Cerebro procesado. Ejecuta La Fábrica de Conocimiento primero.' }, { status: 400 });
-    }
+    const { rows: brainDocs } = await pool.query(
+      'SELECT * FROM ai_agent_brains WHERE agent_id = $1 ORDER BY file_slug ASC;',
+      [id]
+    );
 
-    const brainContext = brains.map((b: any) => `### ${b.title} (${b.file_slug})
-${b.markdown_content}`).join('\n\n');
+    const brainContext = brainDocs.map((b: any) => `### ${b.title}\n${b.markdown_content}`).join('\n\n');
 
     let apiKey = '';
-    if (agent.encrypted_api_key) apiKey = Buffer.from(agent.encrypted_api_key, 'base64').toString('utf8');
-    const provider = agent.llm_provider || 'anthropic';
-    const effectiveApiKey = apiKey || (provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || process.env.ANTHROPIC_API_KEY;
-
-    if (!effectiveApiKey) {
-      return NextResponse.json({ error: 'Falta configurar la API Key de Anthropic o OpenAI.' }, { status: 400 });
+    if (agent.encrypted_api_key) {
+      apiKey = Buffer.from(agent.encrypted_api_key, 'base64').toString('utf8');
     }
 
-    const simPrompt = `Eres el Director de Pruebas del Gimnasio de Role-Playing de IA.
-Vas a orquestar una sesión de Self-Play (Subagente Comprador Difícil vs. Agente Vendedor) para el agente "${agent.name}".
+    const provider = agent.llm_provider || 'google';
+    const effectiveApiKey = apiKey || (
+      provider === 'google'
+        ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+        : provider === 'anthropic'
+        ? process.env.ANTHROPIC_API_KEY
+        : process.env.OPENAI_API_KEY
+    ) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.ANTHROPIC_API_KEY;
 
-Debes simular EXACTAMENTE 3 escenarios de prueba realistas y desafiantes para WhatsApp:
-1. Escenario 1: Objeción de precio / Comparación con producto barato en internet (Amazon/MercadoLibre).
-2. Escenario 2: Desconfianza o miedo a la instalación/dificultad técnica.
-3. Escenario 3: Cliente indeciso que dice "lo voy a pensar" o "mándame info por correo".
+    if (!effectiveApiKey) {
+      return NextResponse.json({
+        error: `Falta configurar la API Key para ${provider}. Ingrésala en los ajustes del agente.`,
+      }, { status: 400 });
+    }
 
-Para cada escenario:
-- El "Comprador" lanza el reto de forma natural.
-- El "Agente" responde aplicando la FÓRMULA HÍBRIDA: Empatía Voss + Mecanismo Técnico Real + Future Pacing + Micro-CTA (pregunta abierta).
+    const simPrompt = `Eres el Entrenador en Jefe y Sparring Partner de IA para Ventas y Servicio.
+Tu objetivo es simular un COMBATE DE ENTRENAMIENTO (Self-Play) entre:
+1. Comprador Escéptico: Desconfiado, sensible al precio, hace preguntas capciosas o compara con la competencia.
+2. Agente en Entrenamiento: "${agent.name}" (Rol: ${agent.role}), quien debe responder usando estrictamente el Segundo Cerebro y el Maletín de WhatsApp.
 
-Devuelve ÚNICAMENTE un JSON válido con este formato:
+Escenario a simular: "${scenario || 'El cliente dice que el servicio o producto le parece caro y que ya tiene otra cotización más barata de un competidor'}"
+
+Debes devolver un JSON con esta estructura exacta:
 {
   "simulations": [
     {
-      "scenario_name": "Objeción de Precio vs. Marketplace",
-      "buyer_persona": "Comprador Escéptico",
+      "scenario_name": "${scenario || 'Objeción de Precio y Comparativa con Competencia'}",
+      "buyer_persona": "Comprador Escéptico y Analítico",
       "dialogue": [
         { "sender": "buyer", "text": "Oye, pero vi uno casi igual en Amazon que cuesta la mitad..." },
         { "sender": "agent", "text": "Entiendo perfecto tu punto Carlos..." }
       ],
       "score": 95,
-      "feedback_notes": "Defendió el mecanismo técnico de 4 etapas sin confrontar y usó etiqueta táctica."
+      "feedback_notes": "Defendió el mecanismo técnico sin confrontar y usó etiqueta táctica de Chris Voss."
     }
   ]
 }
 
 Contexto del Segundo Cerebro del Agente:
-${brainContext}`;
+${brainContext || 'Usa respuestas asertivas, datos técnicos duros y empatía.'}`;
 
     let simResults: any = null;
 
-    if (provider === 'anthropic' || effectiveApiKey.startsWith('sk-ant-')) {
+    if (provider === 'google') {
+      const modelName = agent.llm_model || 'gemini-2.0-flash';
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${effectiveApiKey}`;
+
+      const response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: simPrompt }] }],
+          generationConfig: { responseMimeType: 'application/json' },
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `Error en llamada a Google Gemini (${response.status})`);
+      }
+
+      const resJson = await response.json();
+      simResults = JSON.parse(resJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+    } else if (provider === 'anthropic' || effectiveApiKey.startsWith('sk-ant-')) {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -101,7 +129,6 @@ ${brainContext}`;
       simResults = JSON.parse(resJson.choices?.[0]?.message?.content || '{}');
     }
 
-    // Borrar simulaciones anteriores pendientes y guardar las nuevas
     await pool.query("DELETE FROM ai_agent_simulations WHERE agent_id = $1 AND status = 'pending_review';", [id]);
 
     const createdSims: any[] = [];
@@ -111,11 +138,22 @@ ${brainContext}`;
         INSERT INTO ai_agent_simulations (agent_id, scenario_name, buyer_persona, dialogue, status, feedback_notes, score)
         VALUES ($1, $2, $3, $4, 'pending_review', $5, $6)
         RETURNING *;
-      `, [id, sim.scenario_name, sim.buyer_persona, JSON.stringify(sim.dialogue), sim.feedback_notes || '', sim.score || 90]);
+      `, [
+        id,
+        sim.scenario_name || 'Combate Simulado',
+        sim.buyer_persona || 'Comprador Escéptico',
+        JSON.stringify(sim.dialogue || []),
+        sim.feedback_notes || 'Revisión recomendada',
+        sim.score || 90,
+      ]);
       createdSims.push(rows[0]);
     }
 
-    return NextResponse.json({ success: true, simulations: createdSims });
+    return NextResponse.json({
+      success: true,
+      message: 'Combate de entrenamiento generado.',
+      simulations: createdSims,
+    });
   } catch (err: any) {
     console.error('[Factory Simulate] Error:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });

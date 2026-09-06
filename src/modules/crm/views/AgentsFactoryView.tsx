@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import {
   Bot,
-  Sparkles,
   FolderLock,
   FolderHeart,
   UploadCloud,
@@ -24,8 +23,21 @@ import {
   ThumbsUp,
   Sliders,
   Copy,
-  Plus
+  Plus,
+  Settings as SettingsIcon,
+  AlertTriangle,
+  ArrowRight
 } from 'lucide-react';
+
+export interface ModelOption {
+  id: string;
+  name: string;
+  provider: 'google' | 'anthropic' | 'openai';
+  status: 'active' | 'deprecated' | 'legacy';
+  description: string;
+  isRecommended?: boolean;
+  recommendedReplacement?: string;
+}
 
 export interface AgentData {
   id: string;
@@ -33,12 +45,19 @@ export interface AgentData {
   role: string;
   mission_type: 'ventas_setter' | 'ventas_closer' | 'servicio_soporte';
   status: 'draft' | 'training' | 'active' | 'archived';
-  llm_provider: 'anthropic' | 'openai';
+  llm_provider: 'google' | 'anthropic' | 'openai';
   llm_model: string;
   hasApiKey?: boolean;
   avatar_url?: string;
   created_at?: string;
   updated_at?: string;
+  modelWarning?: {
+    isDeprecated: boolean;
+    currentModel: string;
+    provider: string;
+    recommendedModel: string;
+    reason: string;
+  };
 }
 
 export interface KnowledgeFile {
@@ -93,8 +112,15 @@ export default function AgentsFactoryView() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Catálogo de modelos disponibles dinámicos
+  const [modelCatalog, setModelCatalog] = useState<Record<'google' | 'anthropic' | 'openai', ModelOption[]>>({
+    google: [],
+    anthropic: [],
+    openai: [],
+  });
+
   // Tabs del Taller
-  const [activeTab, setActiveTab] = useState<'materiales' | 'cerebro' | 'gimnasio'>('materiales');
+  const [activeTab, setActiveTab] = useState<'materiales' | 'cerebro' | 'gimnasio' | 'ajustes'>('materiales');
   const [selectedBrainSlug, setSelectedBrainSlug] = useState<string | null>(null);
 
   // Modal de Crear Agente
@@ -103,8 +129,16 @@ export default function AgentsFactoryView() {
   const [newAgentName, setNewAgentName] = useState('');
   const [newAgentMission, setNewAgentMission] = useState<'ventas_setter' | 'ventas_closer' | 'servicio_soporte'>('ventas_setter');
   const [newAgentRole, setNewAgentRole] = useState('Setter Comercial WhatsApp');
-  const [newAgentProvider, setNewAgentProvider] = useState<'anthropic' | 'openai'>('anthropic');
+  const [newAgentProvider, setNewAgentProvider] = useState<'google' | 'anthropic' | 'openai'>('google');
+  const [newAgentModel, setNewAgentModel] = useState('gemini-2.0-flash');
   const [newAgentApiKey, setNewAgentApiKey] = useState('');
+
+  // Ajustes del agente seleccionado
+  const [editProvider, setEditProvider] = useState<'google' | 'anthropic' | 'openai'>('google');
+  const [editModel, setEditModel] = useState('');
+  const [editApiKey, setEditApiKey] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('');
 
   // Proceso de síntesis
   const [synthesizing, setSynthesizing] = useState(false);
@@ -115,6 +149,23 @@ export default function AgentsFactoryView() {
   const [customScenario, setCustomScenario] = useState('');
   const [feedbackSimId, setFeedbackSimId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
+
+  // Cargar catálogo de modelos disponibles
+  const fetchModels = async () => {
+    try {
+      const res = await fetch('/api/agents/models');
+      const data = await res.json();
+      if (data.catalog) {
+        setModelCatalog(data.catalog);
+      }
+    } catch (err: any) {
+      console.warn('No se pudo cargar el catálogo dinámico:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchModels();
+  }, []);
 
   // Cargar lista de agentes
   const fetchAgents = async () => {
@@ -146,6 +197,10 @@ export default function AgentsFactoryView() {
       const data = await res.json();
       if (data.agent) {
         setSelectedAgent(data.agent);
+        setEditProvider(data.agent.llm_provider || 'google');
+        setEditModel(data.agent.llm_model || 'gemini-2.0-flash');
+        setEditName(data.agent.name || '');
+        setEditRole(data.agent.role || '');
         setStudyFiles(data.studyFiles || []);
         setShareableFiles(data.shareableFiles || []);
         setBrainDocs(data.brainDocs || []);
@@ -164,6 +219,17 @@ export default function AgentsFactoryView() {
       fetchAgentDetails(selectedAgentId);
     }
   }, [selectedAgentId]);
+
+  // Actualizar modelo predeterminado al cambiar de proveedor en creación
+  useEffect(() => {
+    if (newAgentProvider === 'google') {
+      setNewAgentModel('gemini-2.0-flash');
+    } else if (newAgentProvider === 'anthropic') {
+      setNewAgentModel('claude-3-5-sonnet-20241022');
+    } else {
+      setNewAgentModel('gpt-4o');
+    }
+  }, [newAgentProvider]);
 
   // Subir archivo a conocimiento (Material de Estudio o Maletín)
   const handleUpload = async (folder: 'material_estudio' | 'material_compartible', files: FileList | null) => {
@@ -228,6 +294,7 @@ export default function AgentsFactoryView() {
           role: newAgentRole.trim(),
           missionType: newAgentMission,
           llmProvider: newAgentProvider,
+          llmModel: newAgentModel,
           apiKey: newAgentApiKey.trim() || undefined,
         }),
       });
@@ -247,6 +314,63 @@ export default function AgentsFactoryView() {
       setError(err.message);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // Actualización rápida de modelo deprecado (1 clic)
+  const handleQuickUpgradeModel = async (recommendedModel: string) => {
+    if (!selectedAgentId) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          llmModel: recommendedModel,
+        }),
+      });
+      if (res.ok) {
+        setSuccessMsg('Modelo actualizado exitosamente a: ' + recommendedModel);
+        await fetchAgentDetails(selectedAgentId);
+        await fetchAgents();
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // Guardar cambios en ajustes del agente
+  const handleSaveSettings = async () => {
+    if (!selectedAgentId) return;
+    setActionLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName.trim(),
+          role: editRole.trim(),
+          llmProvider: editProvider,
+          llmModel: editModel,
+          apiKey: editApiKey.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al guardar ajustes');
+
+      setEditApiKey('');
+      setSuccessMsg('Ajustes del agente actualizados con éxito.');
+      await fetchAgentDetails(selectedAgentId);
+      await fetchAgents();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
     }
   };
 
@@ -356,11 +480,11 @@ export default function AgentsFactoryView() {
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 Fábrica de Agentes de IA
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Segundo Cerebro v2
+                  Segundo Cerebro v2.1
                 </span>
               </h1>
               <p className="text-sm text-slate-500 mt-0.5">
-                Arquitectura no-code para Setters, Closers y Soporte con Psicología de Negociación y el Maletín de WhatsApp.
+                Setters y Closers con Google Gemini, Claude 3.5, GPT-4o, Psicología Avanzada y Maletín de WhatsApp.
               </p>
             </div>
           </div>
@@ -480,15 +604,21 @@ export default function AgentsFactoryView() {
                               ? '⚙️ Entrenando'
                               : '🟡 Borrador'}
                           </span>
-                          <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                          <span className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
                             <Zap className="w-2.5 h-2.5 text-amber-500" />
-                            {ag.llm_provider === 'anthropic' ? 'Claude 3.5' : 'GPT-4o'}
+                            {ag.llm_provider === 'google'
+                              ? 'Gemini'
+                              : ag.llm_provider === 'anthropic'
+                              ? 'Claude'
+                              : 'GPT-4o'}
                           </span>
                         </div>
                       </div>
 
                       <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-                        <span>Creado: {ag.created_at ? new Date(ag.created_at).toLocaleDateString() : 'Reciente'}</span>
+                        <span className="truncate max-w-[140px]" title={ag.llm_model}>
+                          🤖 {ag.llm_model.replace('claude-3-5-', '').replace('20241022', '')}
+                        </span>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -533,6 +663,31 @@ export default function AgentsFactoryView() {
         <div className="lg:col-span-8">
           {selectedAgent ? (
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
+              {/* ALERTA PREVENTIVA DE MODELO DEPRECADO */}
+              {selectedAgent.modelWarning?.isDeprecated && (
+                <div className="bg-amber-500/15 border-b border-amber-300 px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-900">
+                        Modelo en uso deprecado o superado ({selectedAgent.llm_model})
+                      </h4>
+                      <p className="text-xs text-amber-800/90 mt-0.5">
+                        {selectedAgent.modelWarning.reason}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleQuickUpgradeModel(selectedAgent.modelWarning!.recommendedModel)}
+                    disabled={actionLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95 shrink-0"
+                  >
+                    <span>Actualizar a {selectedAgent.modelWarning.recommendedModel}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Barra Superior del Agente */}
               <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
                 <div className="flex items-center gap-3">
@@ -551,13 +706,16 @@ export default function AgentsFactoryView() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                      <span>ID: {selectedAgent.id.slice(0, 8)}...</span>
-                      <span>•</span>
-                      <span className="text-indigo-600 font-medium">
-                        {selectedAgent.llm_provider === 'anthropic' ? '⚡ Anthropic Claude 3.5' : '🤖 OpenAI GPT-4o'}
+                      <span className="text-indigo-600 font-semibold flex items-center gap-1">
+                        <Zap className="w-3 h-3" />
+                        {selectedAgent.llm_provider === 'google'
+                          ? 'Google Gemini (' + selectedAgent.llm_model + ')'
+                          : selectedAgent.llm_provider === 'anthropic'
+                          ? 'Anthropic Claude (' + selectedAgent.llm_model + ')'
+                          : 'OpenAI (' + selectedAgent.llm_model + ')'}
                       </span>
                       <span>•</span>
-                      <span>{selectedAgent.hasApiKey ? '🔑 Llave Propia (BYOK)' : '☁️ Llave de Plataforma'}</span>
+                      <span>{selectedAgent.hasApiKey ? '🔑 Llave Propia (BYOK)' : '☁️ Llave Plataforma'}</span>
                     </p>
                   </div>
                 </div>
@@ -658,6 +816,18 @@ export default function AgentsFactoryView() {
                     {simulations.length}
                   </span>
                 </button>
+
+                <button
+                  onClick={() => setActiveTab('ajustes')}
+                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                    activeTab === 'ajustes'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <SettingsIcon className="w-4 h-4" />
+                  <span>Ajustes & Modelo LLM</span>
+                </button>
               </div>
 
               {/* Contenido de la Pestaña Activa */}
@@ -719,7 +889,6 @@ export default function AgentsFactoryView() {
                           </div>
                         </div>
 
-                        {/* Botón de subida para Carpeta A */}
                         <div className="mt-4 pt-3 border-t border-slate-200">
                           <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-slate-300 hover:bg-slate-100/80 text-slate-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
                             <UploadCloud className="w-4 h-4 text-slate-500" />
@@ -808,7 +977,6 @@ export default function AgentsFactoryView() {
                           </div>
                         </div>
 
-                        {/* Botón de subida para Carpeta B */}
                         <div className="mt-4 pt-3 border-t border-indigo-100">
                           <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer transition-all shadow-sm">
                             <UploadCloud className="w-4 h-4 text-white" />
@@ -848,7 +1016,6 @@ export default function AgentsFactoryView() {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                        {/* Selector vertical de los 7 documentos */}
                         <div className="md:col-span-4 space-y-1.5">
                           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
                             Los 7 Pilares Cognitivos
@@ -876,7 +1043,6 @@ export default function AgentsFactoryView() {
                           })}
                         </div>
 
-                        {/* Visor de contenido Markdown */}
                         <div className="md:col-span-8 bg-slate-900 text-slate-100 rounded-2xl p-5 font-mono text-xs overflow-hidden flex flex-col h-[480px]">
                           <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
                             <span className="text-indigo-400 font-bold font-sans text-sm">
@@ -913,7 +1079,6 @@ export default function AgentsFactoryView() {
                 {/* PESTAÑA 3: GIMNASIO DE ROLE-PLAYING */}
                 {activeTab === 'gimnasio' && (
                   <div className="space-y-6">
-                    {/* Header del Gimnasio & Lanzador de Combates */}
                     <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <h3 className="text-sm font-bold text-amber-950 flex items-center gap-2">
@@ -921,7 +1086,7 @@ export default function AgentsFactoryView() {
                           Gimnasio de Auto-Entrenamiento (Self-Play)
                         </h3>
                         <p className="text-xs text-amber-800/80 mt-0.5">
-                          Un Comprador Escéptico pone a prueba a tu agente. Aprueba o ajusta en 1 solo clic.
+                          Un Comprador Escéptico pone a prueba a tu agente con {selectedAgent.llm_model}. Aprueba o ajusta en 1 clic.
                         </p>
                       </div>
 
@@ -935,7 +1100,6 @@ export default function AgentsFactoryView() {
                       </button>
                     </div>
 
-                    {/* Lista de Simulaciones */}
                     {simulations.length === 0 ? (
                       <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 space-y-2">
                         <Sliders className="w-8 h-8 mx-auto text-slate-300" />
@@ -964,7 +1128,6 @@ export default function AgentsFactoryView() {
                                   : 'bg-white border-slate-200 shadow-sm'
                               }`}
                             >
-                              {/* Título del Escenario y Estado */}
                               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                                 <div>
                                   <div className="flex items-center gap-2">
@@ -997,7 +1160,6 @@ export default function AgentsFactoryView() {
                                 </div>
                               </div>
 
-                              {/* Diálogo Simulado */}
                               <div className="space-y-3 bg-slate-50/80 rounded-xl p-4 max-h-80 overflow-y-auto">
                                 {sim.dialogue?.map((msg, idx) => {
                                   const isAgent = msg.sender === 'agent';
@@ -1031,7 +1193,6 @@ export default function AgentsFactoryView() {
                                 })}
                               </div>
 
-                              {/* Evaluación y Aprobación 1-Clic */}
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
                                 <div className="text-xs text-slate-600">
                                   {sim.evaluation?.summary && (
@@ -1072,7 +1233,6 @@ export default function AgentsFactoryView() {
                                 </div>
                               </div>
 
-                              {/* Caja de feedback */}
                               {feedbackSimId === sim.id && (
                                 <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2 mt-2">
                                   <label className="text-xs font-bold text-amber-900 block">
@@ -1100,6 +1260,153 @@ export default function AgentsFactoryView() {
                         })}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* PESTAÑA 4: AJUSTES & MODELO LLM */}
+                {activeTab === 'ajustes' && (
+                  <div className="space-y-6 max-w-xl">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Nombre del Agente
+                        </label>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Rol Comercial / Descripción
+                        </label>
+                        <input
+                          type="text"
+                          value={editRole}
+                          onChange={(e) => setEditRole(e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                          Proveedor de Inteligencia Artificial
+                        </label>
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditProvider('google');
+                              setEditModel('gemini-2.0-flash');
+                            }}
+                            className={`p-3 rounded-2xl border text-center transition-all ${
+                              editProvider === 'google'
+                                ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
+                                : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="text-xl mb-1">✨</div>
+                            <div className="text-xs font-bold text-slate-800">Google Gemini</div>
+                            <div className="text-[10px] text-slate-500">2.0 Flash / 1.5 Pro</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditProvider('anthropic');
+                              setEditModel('claude-3-5-sonnet-20241022');
+                            }}
+                            className={`p-3 rounded-2xl border text-center transition-all ${
+                              editProvider === 'anthropic'
+                                ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
+                                : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="text-xl mb-1">⚡</div>
+                            <div className="text-xs font-bold text-slate-800">Claude 3.5</div>
+                            <div className="text-[10px] text-slate-500">Sonnet / Haiku</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditProvider('openai');
+                              setEditModel('gpt-4o');
+                            }}
+                            className={`p-3 rounded-2xl border text-center transition-all ${
+                              editProvider === 'openai'
+                                ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
+                                : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="text-xl mb-1">🤖</div>
+                            <div className="text-xs font-bold text-slate-800">OpenAI</div>
+                            <div className="text-[10px] text-slate-500">GPT-4o / Mini</div>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Modelo Específico ({editProvider.toUpperCase()})
+                          </label>
+                          <span className="text-[11px] text-indigo-600 font-semibold">
+                            Lista Oficial Vigente
+                          </span>
+                        </div>
+                        <select
+                          value={editModel}
+                          onChange={(e) => setEditModel(e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600 bg-white"
+                        >
+                          {modelCatalog[editProvider]?.map((m) => (
+                            <option
+                              key={m.id}
+                              value={m.id}
+                              disabled={m.status === 'deprecated'}
+                            >
+                              {m.name} {m.status === 'deprecated' ? '⛔ (DESCONTINUADO)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          {modelCatalog[editProvider]?.find((m) => m.id === editModel)?.description}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <Key className="w-3.5 h-3.5 text-indigo-600" />
+                            Actualizar API Key (BYOK)
+                          </label>
+                          <span className="text-[10px] text-slate-400">
+                            {selectedAgent.hasApiKey ? '🔒 Llave configurada' : 'Sin llave (usa plataforma)'}
+                          </span>
+                        </div>
+                        <input
+                          type="password"
+                          value={editApiKey}
+                          onChange={(e) => setEditApiKey(e.target.value)}
+                          placeholder="Ingresa nueva llave o déjala en blanco para mantener la actual"
+                          className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
+                        />
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          onClick={handleSaveSettings}
+                          disabled={actionLoading}
+                          className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                        >
+                          {actionLoading ? 'Guardando...' : 'Guardar Ajustes del Agente'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1233,7 +1540,7 @@ export default function AgentsFactoryView() {
                     }}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all active:scale-95"
                   >
-                    <span>Siguiente</span>
+                    <span>Siguiente: Proveedor & Modelo</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -1245,52 +1552,88 @@ export default function AgentsFactoryView() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Proveedor de Inteligencia Artificial
+                    1. Proveedor de Inteligencia Artificial
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewAgentProvider('google')}
+                      className={`p-3 rounded-2xl border text-center transition-all ${
+                        newAgentProvider === 'google'
+                          ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-xl mb-1">✨</div>
+                      <div className="text-xs font-bold text-slate-900">Gemini</div>
+                      <div className="text-[10px] text-slate-500">Google AI</div>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => setNewAgentProvider('anthropic')}
-                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                      className={`p-3 rounded-2xl border text-center transition-all ${
                         newAgentProvider === 'anthropic'
                           ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
                           : 'border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                        <Zap className="w-3.5 h-3.5 text-amber-500" />
-                        Claude 3.5 Sonnet
-                      </div>
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        Recomendado para ventas. Extraordinaria persuasión y calidez humana.
-                      </p>
+                      <div className="text-xl mb-1">⚡</div>
+                      <div className="text-xs font-bold text-slate-900">Claude 3.5</div>
+                      <div className="text-[10px] text-slate-500">Anthropic</div>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setNewAgentProvider('openai')}
-                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                      className={`p-3 rounded-2xl border text-center transition-all ${
                         newAgentProvider === 'openai'
                           ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
                           : 'border-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                        <Bot className="w-3.5 h-3.5 text-emerald-600" />
-                        OpenAI GPT-4o
-                      </div>
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        Velocidad récord y respuestas técnicas directas.
-                      </p>
+                      <div className="text-xl mb-1">🤖</div>
+                      <div className="text-xs font-bold text-slate-900">OpenAI</div>
+                      <div className="text-[10px] text-slate-500">GPT-4o</div>
                     </button>
                   </div>
+                </div>
+
+                {/* Selector Desplegable Dinámico de Modelos */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      2. Modelo Disponible ({newAgentProvider.toUpperCase()})
+                    </label>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
+                      Vigente
+                    </span>
+                  </div>
+                  <select
+                    value={newAgentModel}
+                    onChange={(e) => setNewAgentModel(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600 bg-white"
+                  >
+                    {modelCatalog[newAgentProvider]?.map((m) => (
+                      <option
+                        key={m.id}
+                        value={m.id}
+                        disabled={m.status === 'deprecated'}
+                      >
+                        {m.name} {m.status === 'deprecated' ? '⛔ (DESCONTINUADO)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {modelCatalog[newAgentProvider]?.find((m) => m.id === newAgentModel)?.description}
+                  </p>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                       <Key className="w-3.5 h-3.5 text-indigo-600" />
-                      Tu API Key Personal (Opcional - BYOK)
+                      3. Tu API Key Personal (Opcional - BYOK)
                     </label>
                     <span className="text-[10px] text-slate-400">Bring Your Own Key</span>
                   </div>
@@ -1299,7 +1642,9 @@ export default function AgentsFactoryView() {
                     value={newAgentApiKey}
                     onChange={(e) => setNewAgentApiKey(e.target.value)}
                     placeholder={
-                      newAgentProvider === 'anthropic'
+                      newAgentProvider === 'google'
+                        ? 'AIzaSy... (Opcional, si la dejas vacía usa la plataforma)'
+                        : newAgentProvider === 'anthropic'
                         ? 'sk-ant-api03-... (Opcional)'
                         : 'sk-proj-... (Opcional)'
                     }

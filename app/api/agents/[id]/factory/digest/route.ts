@@ -7,14 +7,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
 
-    // 1. Cargar datos del agente
     const { rows: agentRows } = await pool.query('SELECT * FROM ai_agents WHERE id = $1 LIMIT 1;', [id]);
     if (!agentRows.length) {
       return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 });
     }
     const agent = agentRows[0];
 
-    // 2. Cargar materia prima: Material de Estudio y Material Compartible
     const { rows: knowledge } = await pool.query(
       'SELECT * FROM ai_agent_knowledge WHERE agent_id = $1 ORDER BY created_at ASC;',
       [id]
@@ -23,46 +21,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const studyFiles = knowledge.filter((k: any) => k.folder === 'material_estudio');
     const shareableFiles = knowledge.filter((k: any) => k.folder === 'material_compartible');
 
-    if (studyFiles.length === 0 && shareableFiles.length === 0) {
-      return NextResponse.json({
-        error: 'No hay materia prima cargada. Sube al menos un archivo en Material de Estudio o Material Compartible para que La Fábrica pueda procesarlo.',
-      }, { status: 400 });
-    }
-
-    // 3. Preparar resumen de materia prima
     const studySummary = studyFiles.map((f: any, idx: number) => {
-      return `--- Documento de Estudio #${idx + 1}: ${f.file_name} (${f.file_type}) ---
-${f.content_text || 'Ficha técnica / Manual cargado en el sistema.'}`;
+      return `[${idx + 1}] Archivo: ${f.file_name} (${f.file_type})
+Contenido / Resumen:
+${f.content_text || '(Documento técnico procesado en base de conocimiento)'}`;
     }).join('\n\n');
 
     const shareableSummary = shareableFiles.map((f: any, idx: number) => {
-      return `--- Archivo Compartible #${idx + 1}: ${f.file_name} (${f.file_type}) ---
+      return `[${idx + 1}] Activo para compartir: ${f.file_name} (${f.file_type})
 URL CDN: ${f.cdn_url || f.storage_url}
 Regla sugerida: ${f.trigger_rule || 'Enviar cuando el cliente pregunte o solicite demostración.'}
 Caption: ${f.suggested_caption || ''}`;
     }).join('\n\n');
 
-    // 4. Determinar API Key y Proveedor (BYOK)
     let apiKey = '';
     if (agent.encrypted_api_key) {
       apiKey = Buffer.from(agent.encrypted_api_key, 'base64').toString('utf8');
     }
 
-    const provider = agent.llm_provider || 'anthropic';
-    const effectiveApiKey = apiKey || (provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || process.env.ANTHROPIC_API_KEY;
+    const provider = agent.llm_provider || 'google';
+    const effectiveApiKey = apiKey || (
+      provider === 'google'
+        ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+        : provider === 'anthropic'
+        ? process.env.ANTHROPIC_API_KEY
+        : process.env.OPENAI_API_KEY
+    ) || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.ANTHROPIC_API_KEY;
 
     if (!effectiveApiKey) {
       return NextResponse.json({
-        error: 'Falta configurar la API Key (BYOK) de Anthropic o OpenAI para este agente.',
+        error: `Falta configurar la API Key para ${provider}. Ingrésala en los ajustes del agente o en las variables de entorno.`,
       }, { status: 400 });
     }
 
-    // 5. El Prompt Maestro de la Fábrica de Conocimiento (Cóctel de Ventas y Psicología)
     const masterPrompt = `Eres el Ingeniero Maestro de la Fábrica de Conocimiento de un CRM Agentico de Élite.
 Tu misión es procesar la MATERIA PRIMA proporcionada por una empresa y destilar el SEGUNDO CEREBRO del agente.
 
 El agente se llama: "${agent.name}"
-Misión: "${agent.mission_type === 'sales' ? 'Ventas y Cierre de Citas (Setter/Closer)' : 'Servicio al Cliente, Soporte y Fidelización'}"
+Misión: "${agent.mission_type.startsWith('ventas') ? 'Ventas y Cierre de Citas (Setter/Closer)' : 'Servicio al Cliente, Soporte y Fidelización'}"
 Rol: "${agent.role}"
 
 CRUCIAL: Debes tejer DATOS TÉCNICOS DUROS (especificaciones, medidas, certificaciones, componentes reales) con el CÓCTEL MAESTRO DE PERSUASIÓN Y PSICOLOGÍA:
@@ -93,8 +89,30 @@ ${shareableSummary || 'Sin archivos multimedia registrados.'}`;
 
     let generatedBrains: any = null;
 
-    // 6. Invocación al LLM
-    if (provider === 'anthropic' || effectiveApiKey.startsWith('sk-ant-')) {
+    if (provider === 'google') {
+      const modelName = agent.llm_model || 'gemini-2.0-flash';
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${effectiveApiKey}`;
+
+      const response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: masterPrompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `Error en llamada a Google Gemini (${response.status})`);
+      }
+
+      const resJson = await response.json();
+      const rawText = resJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      generatedBrains = JSON.parse(rawText);
+    } else if (provider === 'anthropic' || effectiveApiKey.startsWith('sk-ant-')) {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -110,13 +128,12 @@ ${shareableSummary || 'Sin archivos multimedia registrados.'}`;
       });
 
       if (!response.ok) {
-        const errData = await response.json();
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error?.message || 'Error en llamada a Anthropic');
       }
 
       const resJson = await response.json();
       const rawText = resJson.content?.[0]?.text || '';
-      // Limpiar posible bloque markdown ```json ... ```
       const cleanJson = rawText.replace(/^\s*```(json)?/i, '').replace(/```\s*$/, '').trim();
       generatedBrains = JSON.parse(cleanJson);
     } else {
@@ -135,7 +152,7 @@ ${shareableSummary || 'Sin archivos multimedia registrados.'}`;
       });
 
       if (!response.ok) {
-        const errData = await response.json();
+        const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error?.message || 'Error en llamada a OpenAI');
       }
 
@@ -144,7 +161,6 @@ ${shareableSummary || 'Sin archivos multimedia registrados.'}`;
       generatedBrains = JSON.parse(rawText);
     }
 
-    // 7. Guardar en ai_agent_brains
     const brainDocs = [
       { slug: '01-identidad-y-tono', title: 'Identidad, Tono y Voz Humana', content: generatedBrains.identidad_y_tono || '# Identidad y Tono' },
       { slug: '02-mecanismos-tecnicos', title: 'Mecanismos Técnicos y Datos Duros', content: generatedBrains.mecanismos_tecnicos || '# Mecanismos Técnicos' },
@@ -164,7 +180,6 @@ ${shareableSummary || 'Sin archivos multimedia registrados.'}`;
       `, [id, doc.slug, doc.title, doc.content]);
     }
 
-    // Actualizar estado del agente a 'training' (listo para simulaciones)
     await pool.query("UPDATE ai_agents SET status = 'training', updated_at = NOW() WHERE id = $1;", [id]);
 
     return NextResponse.json({
