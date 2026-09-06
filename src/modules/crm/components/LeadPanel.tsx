@@ -413,32 +413,41 @@ export default function LeadPanel() {
 
       <aside
         className={`animate-panel fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-line bg-app shadow-2xl transition-all duration-300 ease-in-out ${
-          isExpanded ? 'w-full sm:w-[840px] max-w-[92vw]' : 'w-full sm:w-105'
+          isExpanded ? 'w-full sm:w-[840px] max-w-[92vw]' : 'w-full sm:w-[460px] max-w-[100vw]'
         }`}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-          <Avatar name={lead.name} size="lg" />
+        <div className="flex items-center gap-2.5 border-b border-line px-4 py-3.5 sm:px-5 sm:py-4">
+          <Avatar name={lead.name} size="md" />
           <div className="min-w-0 flex-1">
-            <h2 className="truncate font-bold">{lead.name}</h2>
-            <p className="truncate text-sm text-ink-soft">{lead.company}</p>
+            <h2 className="truncate font-bold text-sm sm:text-base text-ink">{lead.name}</h2>
+            <p className="truncate text-xs text-ink-soft">{lead.company}</p>
           </div>
-          <StageSelect
-            value={lead.stage}
-            onChange={(s) => updateLead(lead.id, s === 'perdido' ? { stage: s, temperature: 'lost' } : { stage: s })}
-          />
-          {/* Botón de expandir al doble (solo escritorio) */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="hidden sm:flex items-center justify-center rounded-lg p-1.5 text-ink-soft hover:bg-soft hover:text-ink transition"
-            title={isExpanded ? 'Reducir a tamaño estándar' : 'Expandir al doble de tamaño'}
-            aria-label="Alternar ancho"
-          >
-            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-          <button onClick={closePanel} className="rounded-lg p-1.5 text-ink-soft hover:bg-soft" aria-label="Cerrar">
-            <X size={18} />
-          </button>
+          <div className="shrink-0">
+            <StageSelect
+              value={lead.stage}
+              onChange={(s) => updateLead(lead.id, s === 'perdido' ? { stage: s, temperature: 'lost' } : { stage: s })}
+            />
+          </div>
+          {/* Botones de acción derecha: Expandir y Cerrar */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="hidden sm:flex items-center justify-center rounded-lg p-1.5 text-ink-soft hover:bg-soft hover:text-ink transition"
+              title={isExpanded ? 'Reducir a tamaño estándar' : 'Expandir al doble de tamaño'}
+              aria-label="Alternar ancho"
+            >
+              {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+            <button
+              onClick={closePanel}
+              className="flex items-center justify-center rounded-lg p-1.5 text-ink-soft hover:bg-soft hover:text-ink transition"
+              aria-label="Cerrar panel"
+              title="Cerrar panel"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Hub de comunicación */}
