@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check, Maximize2, Minimize2, RefreshCw, Paperclip, Folder, LayoutTemplate, FileText, Film, Image as ImageIcon } from 'lucide-react'
+import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check, Maximize2, Minimize2, RefreshCw, Paperclip, Folder, LayoutTemplate, FileText, Film, Image as ImageIcon, ExternalLink } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, StageSelect, CHANNEL_LABEL } from './ui'
 import { TagEditor } from './TagEditor'
@@ -446,7 +446,15 @@ export default function LeadPanel() {
           <a href={`tel:${lead.phone}`} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-call-bg py-2 text-xs font-bold text-call-text hover:opacity-80">
             <Phone size={13} /> Llamar
           </a>
-          <button onClick={() => openWhatsApp(lead.phone)} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-wa-bg py-2 text-xs font-bold text-wa-text hover:opacity-80">
+          <button
+            onClick={() => openLead(lead.id, 'chat')}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition ${
+              panelTab === 'chat'
+                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400/60'
+                : 'bg-wa-bg text-wa-text hover:bg-emerald-100 hover:opacity-90'
+            }`}
+            title="Abrir chat de WhatsApp"
+          >
             <MessageCircle size={13} /> WhatsApp
           </button>
           <a href={`mailto:${lead.email}`} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-mail-bg py-2 text-xs font-bold text-mail-text hover:opacity-80">
@@ -456,7 +464,7 @@ export default function LeadPanel() {
 
         {/* Tabs */}
         <div className="flex border-b border-line px-5">
-          {(['perfil', 'notas', 'chat', 'citas'] as const).map((t) => (
+          {(['perfil', 'notas', 'citas'] as const).map((t) => (
             <button
               key={t}
               onClick={() => openLead(lead.id, t)}
@@ -468,8 +476,6 @@ export default function LeadPanel() {
                 <UserRound size={13} />
               ) : t === 'notas' ? (
                 <StickyNote size={13} />
-              ) : t === 'chat' ? (
-                <MessageCircle size={13} />
               ) : (
                 <Calendar size={13} />
               )}{' '}
@@ -545,19 +551,29 @@ export default function LeadPanel() {
                 <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-[11px] font-semibold text-ink-soft">WhatsApp en vivo</span>
               </div>
-              <button
-                onClick={() => {
-                  if (lead) {
-                    setLoadingChat(true);
-                    loadLeadMessages(lead.id, lead.contactId).finally(() => setLoadingChat(false));
-                  }
-                }}
-                className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                title="Actualizar mensajes"
-              >
-                <RefreshCw size={11} className={loadingChat ? 'animate-spin' : ''} />
-                Actualizar
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => openWhatsApp(lead.phone)}
+                  className="flex items-center gap-1 text-[11px] text-ink-soft hover:text-primary transition"
+                  title="Abrir en WhatsApp Web externo"
+                >
+                  <ExternalLink size={11} />
+                  <span>Web</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (lead) {
+                      setLoadingChat(true);
+                      loadLeadMessages(lead.id, lead.contactId).finally(() => setLoadingChat(false));
+                    }
+                  }}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                  title="Actualizar mensajes"
+                >
+                  <RefreshCw size={11} className={loadingChat ? 'animate-spin' : ''} />
+                  Actualizar
+                </button>
+              </div>
             </div>
 
             {/* Chat del lead */}
