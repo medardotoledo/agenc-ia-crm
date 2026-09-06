@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react'
-import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check, Maximize2, Minimize2, RefreshCw, Paperclip, Folder, LayoutTemplate, FileText, Film, Image as ImageIcon } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, StageSelect, CHANNEL_LABEL } from './ui'
 import { TagEditor } from './TagEditor'
 import { STAGE_META, TEMP_META, APPOINTMENTS } from '@/lib/data/mock'
 import { openWhatsApp } from '@/lib/whatsapp'
-import type { NoteType, Lead, Stage, Temperature } from '@/types'
+import type { NoteType, Lead, Stage, Temperature, Message } from '@/types'
+import { AudioRecorder } from './AudioRecorder'
+import { TemplatesModal } from './TemplatesModal'
+import { MediaLibraryModal } from './MediaLibraryModal'
 
 const NOTE_TYPES: { id: NoteType; label: string; bg: string; text: string }[] = [
   { id: 'note', label: 'Nota', bg: 'bg-note-bg', text: 'text-note-text' },
@@ -266,7 +269,7 @@ function CitasTab({ lead }: { lead: Lead }) {
 }
 
 export default function LeadPanel() {
-  const { selectedLeadId, closePanel, panelTab, openLead, addNote, sendMessage, loadLeadMessages, notes, messages } = useApp()
+  const { selectedLeadId, closePanel, panelTab, openLead, addNote, sendMessage, sendMediaMessage, loadLeadMessages, notes, messages, ctx } = useApp()
   const { leads, updateLead } = useLeads()
   const [text, setText] = useState('')
   const [noteType, setNoteType] = useState<NoteType>('note')
@@ -274,12 +277,31 @@ export default function LeadPanel() {
   const [isExpanded, setIsExpanded] = useState(false)
   const [loadingChat, setLoadingChat] = useState(false)
 
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<{
+    file: File;
+    previewUrl: string;
+    mediaType: 'image' | 'video' | 'document' | 'audio';
+    base64: string;
+  } | null>(null)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null)
+
   const lead = leads.find((l) => l.id === selectedLeadId)
+
+  const scrollToBottom = () => {
+    chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   useEffect(() => {
     if (lead && panelTab === 'chat') {
       setLoadingChat(true)
-      loadLeadMessages(lead.id, lead.contactId).finally(() => setLoadingChat(false))
+      loadLeadMessages(lead.id, lead.contactId).finally(() => {
+        setLoadingChat(false)
+        scrollToBottom()
+      })
 
       const timer = setInterval(() => {
         loadLeadMessages(lead.id, lead.contactId)
@@ -288,6 +310,13 @@ export default function LeadPanel() {
       return () => clearInterval(timer)
     }
   }, [lead?.id, lead?.contactId, panelTab, loadLeadMessages])
+
+  useEffect(() => {
+    if (panelTab === 'chat') {
+      scrollToBottom()
+    }
+  }, [messages.length, panelTab])
+
   if (!lead) return null
 
   const leadNotes = notes.filter((n) => n.leadId === lead.id)
@@ -299,10 +328,70 @@ export default function LeadPanel() {
     setText('')
   }
 
-  const sendChat = () => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    let mediaType: 'image' | 'video' | 'document' | 'audio' = 'document'
+    if (file.type.startsWith('image/')) mediaType = 'image'
+    else if (file.type.startsWith('video/')) mediaType = 'video'
+    else if (file.type.startsWith('audio/')) mediaType = 'audio'
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const base64 = reader.result as string
+      setPendingFile({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        mediaType,
+        base64,
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const sendChat = async () => {
+    if (!lead) return
+    if (pendingFile) {
+      await sendMediaMessage(lead.id, {
+        media: pendingFile.base64,
+        mediaType: pendingFile.mediaType,
+        fileName: pendingFile.file.name,
+        caption: chatText.trim() || undefined,
+      })
+      setPendingFile(null)
+      setChatText('')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      scrollToBottom()
+      return
+    }
+
     if (!chatText.trim()) return
     sendMessage(lead.id, lead.channels[0] ?? 'whatsapp', chatText.trim())
     setChatText('')
+    scrollToBottom()
+  }
+
+  const handleSendAudio = async (audioBase64: string) => {
+    if (!lead) return
+    await sendMediaMessage(lead.id, {
+      media: audioBase64,
+      mediaType: 'audio',
+      fileName: `audio_${Date.now()}.ogg`,
+      isVoiceNote: true,
+    })
+    scrollToBottom()
+  }
+
+  const handleSendFromLibrary = async (media: { url: string; fileType: string; name: string; caption?: string }) => {
+    if (!lead) return
+    await sendMediaMessage(lead.id, {
+      media: media.url,
+      mediaType: (media.fileType as any) || 'image',
+      fileName: media.name,
+      caption: media.caption,
+    })
+    scrollToBottom()
   }
 
   return (
@@ -469,22 +558,131 @@ export default function LeadPanel() {
               ) : leadMessages.length === 0 ? (
                 <p className="pt-8 text-center text-sm text-ink-soft">Sin conversación todavía con este lead.</p>
               ) : (
-                leadMessages.map((m) => (
-                  <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                      m.direction === 'out' ? 'rounded-br-sm bg-primary text-inverse' : 'rounded-bl-sm border border-line bg-app'
-                    }`}>
-                      {m.body}
-                      <div className={`mt-1 text-[10px] ${m.direction === 'out' ? 'text-inverse/60' : 'text-ink-soft'}`}>
-                        {m.time}{m.author ? ` — ${m.author}` : ''}
+                leadMessages.map((m) => {
+                  const isOut = m.direction === 'out';
+                  const attachments = m.attachments || [];
+
+                  return (
+                    <div key={m.id} className={`flex ${isOut ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                        isOut ? 'rounded-br-sm bg-primary text-inverse' : 'rounded-bl-sm border border-line bg-app'
+                      }`}>
+                        {/* Attachments multimedia */}
+                        {attachments.map((att, idx) => {
+                          const isAudio = att.includes('audio') || att.includes('.mp3') || att.includes('.ogg') || att.includes('.opus') || att.includes('.wav') || m.body.includes('Nota de voz');
+                          const isVideo = att.includes('.mp4') || att.includes('.mov') || att.includes('.webm') || att.includes('video/');
+                          const isImage = att.includes('image/') || att.match(/\.(png|jpg|jpeg|webp|gif)/i);
+
+                          if (isAudio) {
+                            return (
+                              <div key={idx} className="my-1.5 flex flex-col gap-1">
+                                <span className="text-xs font-semibold">🎤 Nota de voz</span>
+                                <audio controls src={att} className="w-full max-w-xs h-8 rounded" preload="metadata" />
+                              </div>
+                            );
+                          }
+
+                          if (isVideo) {
+                            return (
+                              <div key={idx} className="my-1.5 overflow-hidden rounded-xl bg-black/20">
+                                <video controls src={att} className="max-h-56 w-full rounded-xl object-contain" />
+                              </div>
+                            );
+                          }
+
+                          if (isImage) {
+                            return (
+                              <div key={idx} className="my-1.5 overflow-hidden rounded-xl">
+                                <a href={att} target="_blank" rel="noopener noreferrer">
+                                  <img src={att} alt="Adjunto" className="max-h-56 rounded-xl object-cover hover:opacity-90 transition" loading="lazy" />
+                                </a>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div key={idx} className="my-1.5">
+                              <a href={att} target="_blank" rel="noopener noreferrer" download className={`flex items-center gap-2 rounded-xl p-2 text-xs font-semibold ${isOut ? 'bg-white/10 text-white' : 'bg-soft text-ink'}`}>
+                                <FileText size={16} className="shrink-0 text-red-500" />
+                                <span className="truncate">Ver/Descargar archivo</span>
+                              </a>
+                            </div>
+                          );
+                        })}
+
+                        {m.body && <p className="whitespace-pre-wrap">{m.body}</p>}
+
+                        <div className={`mt-1 text-[10px] ${isOut ? 'text-inverse/60 text-right' : 'text-ink-soft'}`}>
+                          {m.time}{m.author ? ` — ${m.author}` : ''}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
+              <div ref={chatMessagesEndRef} />
             </div>
+
+            {/* Preview de archivo pendiente */}
+            {pendingFile && (
+              <div className="flex items-center justify-between border-t border-line bg-soft px-4 py-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  {pendingFile.mediaType === 'image' ? (
+                    <ImageIcon size={15} className="text-primary shrink-0" />
+                  ) : pendingFile.mediaType === 'video' ? (
+                    <Film size={15} className="text-primary shrink-0" />
+                  ) : (
+                    <FileText size={15} className="text-red-500 shrink-0" />
+                  )}
+                  <span className="truncate font-semibold text-ink">{pendingFile.file.name}</span>
+                  <span className="text-ink-soft">({(pendingFile.file.size / 1024).toFixed(0)} KB)</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setPendingFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="rounded-lg p-1 text-ink-soft hover:bg-line hover:text-ink"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
+            {/* Compositor */}
             <div className="border-t border-line px-5 py-3">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*,video/*,application/pdf,audio/*"
+                className="hidden"
+              />
               <div className="flex items-end gap-2">
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-ink transition"
+                    title="Adjuntar archivo local"
+                  >
+                    <Paperclip size={16} />
+                  </button>
+                  <button
+                    onClick={() => setMediaLibraryOpen(true)}
+                    className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
+                    title="Biblioteca multimedia GHL"
+                  >
+                    <Folder size={16} />
+                  </button>
+                  <button
+                    onClick={() => setTemplatesOpen(true)}
+                    className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
+                    title="Plantillas y respuestas rápidas"
+                  >
+                    <LayoutTemplate size={16} />
+                  </button>
+                </div>
+
                 <textarea
                   value={chatText}
                   onChange={(e) => setChatText(e.target.value)}
@@ -493,11 +691,39 @@ export default function LeadPanel() {
                   rows={2}
                   className="flex-1 resize-none rounded-lg border border-line bg-soft/50 p-3 text-sm outline-none focus:border-primary-light"
                 />
+
+                <AudioRecorder
+                  onSendAudio={handleSendAudio}
+                  disabled={lead.channels[0] !== 'whatsapp' && lead.channels.length > 0 && !lead.phone}
+                />
+
                 <button onClick={sendChat} className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light" aria-label="Enviar">
                   <Send size={16} />
                 </button>
               </div>
             </div>
+
+            {/* Modal de Plantillas GHL */}
+            <TemplatesModal
+              isOpen={templatesOpen}
+              onClose={() => setTemplatesOpen(false)}
+              onSelectTemplate={(tplText) => setChatText(tplText)}
+              locationId={ctx?.accountId || 'OS9czz85LUvBeljk8FEv'}
+              contactData={{
+                name: lead.name,
+                phone: lead.phone,
+                email: lead.email,
+              }}
+            />
+
+            {/* Modal de Biblioteca Multimedia GHL */}
+            <MediaLibraryModal
+              isOpen={mediaLibraryOpen}
+              onClose={() => setMediaLibraryOpen(false)}
+              onSendMedia={handleSendFromLibrary}
+              locationId={ctx?.accountId || 'OS9czz85LUvBeljk8FEv'}
+              leadName={lead.name}
+            />
           </>
         )}
       </aside>

@@ -41,6 +41,7 @@ export interface Message {
   body: string
   author?: string
   time: string
+  attachments?: string[]
 }
 
 export interface Conversation {
@@ -53,6 +54,7 @@ export interface Conversation {
   preview: string
   time: string
   unread: number
+  lastMessageDate?: number
 }
 
 export interface Appointment {

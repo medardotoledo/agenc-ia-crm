@@ -109,6 +109,8 @@ export async function fetchConversations(accountId: string, leads: Lead[]): Prom
       const lastMsg = c.lastMessageBody || '';
       const isoDate = c.lastMessageDate ? new Date(c.lastMessageDate).toISOString() : new Date().toISOString();
 
+      const timeMs = c.lastMessageDate ? new Date(c.lastMessageDate).getTime() : 0;
+
       return {
         leadId: targetLeadId,
         contactId: c.contactId,
@@ -119,8 +121,12 @@ export async function fetchConversations(accountId: string, leads: Lead[]): Prom
         preview: lastMsg.slice(0, 60),
         time: fmtDate(isoDate),
         unread: c.unreadCount || 0,
+        lastMessageDate: timeMs,
       };
     });
+
+    // Ordenar con los últimos mensajes hasta arriba, exactamente como WhatsApp
+    convos.sort((a, b) => (b.lastMessageDate || 0) - (a.lastMessageDate || 0));
 
     return { convos, msgs: [] };
   } catch (err) {

@@ -49,6 +49,17 @@ interface AppState {
   toggleSidebar: () => void;
   addNote: (leadId: string, type: NoteType, content: string) => void;
   sendMessage: (leadId: string, channel: Message['channel'], body: string) => void;
+  sendMediaMessage: (
+    leadId: string,
+    mediaData: {
+      media: string;
+      mediaType: 'image' | 'video' | 'audio' | 'document';
+      fileName?: string;
+      caption?: string;
+      isVoiceNote?: boolean;
+      mimeType?: string;
+    }
+  ) => Promise<void>;
   loadLeadMessages: (leadId: string, contactId?: string, conversationId?: string) => Promise<void>;
   /** Carga (o recarga) todos los datos del CRM para la subcuenta activa.
    *  Si el usuario es `agent` con `onlyAssigned`, solo ve sus propios leads. */
@@ -102,15 +113,23 @@ export const useApp = create<AppState>((set, get) => ({
   },
   sendMessage: (leadId, channel, body) => {
     const ctx = get().ctx;
-    set((s) => ({
-      messages: [
-        ...s.messages,
-        { id: 'm' + Date.now(), leadId, channel, direction: 'out', body, author: ctx?.userName ?? 'Yo', time: 'Ahora' },
-      ],
-      conversations: s.conversations.map((c) =>
-        c.leadId === leadId && channel !== 'internal' ? { ...c, preview: body.slice(0, 40), time: 'Ahora' } : c
-      ),
-    }));
+    set((s) => {
+      const activeConvo = s.conversations.find((c) => c.leadId === leadId);
+      const remainingConvos = s.conversations.filter((c) => c.leadId !== leadId);
+      const updatedConvo = activeConvo
+        ? { ...activeConvo, preview: body.slice(0, 50), time: 'Ahora', lastMessageDate: Date.now() }
+        : null;
+
+      return {
+        messages: [
+          ...s.messages,
+          { id: 'm' + Date.now(), leadId, channel, direction: 'out', body, author: ctx?.userName ?? 'Yo', time: 'Ahora' },
+        ],
+        conversations: updatedConvo && channel !== 'internal'
+          ? [updatedConvo, ...remainingConvos]
+          : s.conversations,
+      };
+    });
     const lead = useLeads.getState().leads.find((l) => l.id === leadId);
     const convo = get().conversations.find((c) => c.leadId === leadId);
     const targetPhone = lead?.phone || convo?.phone;
@@ -131,6 +150,60 @@ export const useApp = create<AppState>((set, get) => ({
             contactId: lead?.contactId || convo?.contactId,
           })
         }).catch(err => console.error('Error enviando WhatsApp:', err));
+      }
+    }
+  },
+  sendMediaMessage: async (leadId, mediaData) => {
+    const ctx = get().ctx;
+    const isVoice = mediaData.isVoiceNote;
+    const previewText = mediaData.caption || (isVoice ? '🎤 Nota de voz' : `📎 ${mediaData.fileName || 'Archivo'}`);
+
+    set((s) => {
+      const activeConvo = s.conversations.find((c) => c.leadId === leadId);
+      const remainingConvos = s.conversations.filter((c) => c.leadId !== leadId);
+      const updatedConvo = activeConvo
+        ? { ...activeConvo, preview: previewText, time: 'Ahora', lastMessageDate: Date.now() }
+        : null;
+
+      return {
+        messages: [
+          ...s.messages,
+          {
+            id: 'm' + Date.now(),
+            leadId,
+            channel: 'whatsapp',
+            direction: 'out',
+            body: previewText,
+            attachments: [mediaData.media],
+            author: ctx?.userName ?? 'Yo',
+            time: 'Ahora',
+          },
+        ],
+        conversations: updatedConvo
+          ? [updatedConvo, ...remainingConvos]
+          : s.conversations,
+      };
+    });
+
+    const lead = useLeads.getState().leads.find((l) => l.id === leadId);
+    const convo = get().conversations.find((c) => c.leadId === leadId);
+    const targetPhone = lead?.phone || convo?.phone;
+
+    if (ctx && targetPhone) {
+      try {
+        await fetch('/api/whatsapp/send-media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accountId: ctx.accountId,
+            instanceName: `wa_${ctx.accountId.replace(/[^a-zA-Z0-9]/g, '_')}`,
+            number: targetPhone.replace(/\D/g, ''),
+            contactId: lead?.contactId || convo?.contactId,
+            ...mediaData,
+          }),
+        });
+      } catch (err) {
+        console.error('Error enviando media por WhatsApp:', err);
       }
     }
   },
@@ -157,6 +230,7 @@ export const useApp = create<AppState>((set, get) => ({
           channel: (m.channel as Message['channel']) || 'whatsapp',
           direction: m.direction === 'inbound' || m.direction === 'in' ? 'in' : 'out',
           body: m.body || '',
+          attachments: m.attachments || [],
           author: m.author,
           time: m.time || 'Ahora',
         }));
