@@ -283,7 +283,7 @@ export default function LeadPanel() {
 
       const timer = setInterval(() => {
         loadLeadMessages(lead.id, lead.contactId)
-      }, 7000)
+      }, 3500)
 
       return () => clearInterval(timer)
     }

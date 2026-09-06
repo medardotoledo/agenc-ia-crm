@@ -1,7 +1,24 @@
 import { NextResponse } from 'next/server';
+import { Pool } from 'pg';
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '';
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+async function getGHLToken(accountId: string): Promise<string> {
+  try {
+    const { rows } = await pool.query(
+      'SELECT access_token FROM ghl_installations WHERE location_id = $1 LIMIT 1;',
+      [accountId]
+    );
+    if (rows.length && rows[0].access_token) {
+      return rows[0].access_token;
+    }
+  } catch (err: any) {
+    console.warn('[Send WA] DB Query error:', err.message);
+  }
+  return process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966';
+}
 
 export async function POST(req: Request) {
   try {
@@ -62,6 +79,44 @@ export async function POST(req: Request) {
     const data = await actualResponse.json().catch(() => ({}));
     if (!actualResponse.ok) {
        return NextResponse.json({ error: data?.response?.message || data?.message || 'Error from API' }, { status: actualResponse.status });
+    }
+
+    // Inyectar inmediatamente en GoHighLevel para sincronizar el hilo saliente
+    try {
+      let ghlContactId = body.contactId;
+      const effectiveAccountId = accountId || (instanceName ? instanceName.replace(/^(sub_|wa_)/, '') : 'OS9czz85LUvBeljk8FEv');
+      const ghlToken = await getGHLToken(effectiveAccountId);
+      const ghlHeaders = {
+        Authorization: `Bearer ${ghlToken}`,
+        'Content-Type': 'application/json',
+        Version: '2021-04-15',
+      };
+
+      if (!ghlContactId && number) {
+        const cleanNumber = number.replace(/\D/g, '');
+        const searchRes = await fetch(`https://services.leadconnectorhq.com/contacts/?query=%2B${cleanNumber}&locationId=${effectiveAccountId}`, {
+          headers: ghlHeaders,
+        });
+        if (searchRes.ok) {
+          const sData = await searchRes.json();
+          ghlContactId = sData.contacts?.[0]?.id;
+        }
+      }
+
+      if (ghlContactId) {
+        await fetch('https://services.leadconnectorhq.com/conversations/messages', {
+          method: 'POST',
+          headers: ghlHeaders,
+          body: JSON.stringify({
+            type: 'Live_Chat',
+            contactId: ghlContactId,
+            message: text,
+          }),
+        });
+        console.log('[Send WA] Outbound message synced to GHL for contact:', ghlContactId);
+      }
+    } catch (ghlErr: any) {
+      console.warn('[Send WA] Could not sync outbound to GHL:', ghlErr.message);
     }
 
     return NextResponse.json(data);

@@ -58,7 +58,7 @@ export default function ConversationsView() {
 
       const timer = setInterval(() => {
         loadLeadMessages(active.leadId, active.contactId || matchedLead?.contactId, active.conversationId)
-      }, 7000)
+      }, 3500)
 
       return () => clearInterval(timer)
     }

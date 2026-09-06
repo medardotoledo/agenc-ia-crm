@@ -124,9 +124,11 @@ export const useApp = create<AppState>((set, get) => ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            accountId: ctx.accountId,
             instanceName: `wa_${ctx.accountId.replace(/[^a-zA-Z0-9]/g, '_')}`,
             number: targetPhone.replace(/\D/g, ''),
             text: body,
+            contactId: lead?.contactId || convo?.contactId,
           })
         }).catch(err => console.error('Error enviando WhatsApp:', err));
       }
@@ -161,8 +163,12 @@ export const useApp = create<AppState>((set, get) => ({
 
         set((s) => {
           const otherMsgs = s.messages.filter((m) => m.leadId !== leadId);
+          // Conservar mensajes salientes locales para que NUNCA se borren de la pantalla mientras se sincronizan
+          const pendingOptimistic = s.messages.filter(
+            (m) => m.leadId === leadId && m.id.startsWith('m') && m.direction === 'out' && !mappedMsgs.some((gm) => gm.body.trim() === m.body.trim())
+          );
           return {
-            messages: [...otherMsgs, ...mappedMsgs],
+            messages: [...otherMsgs, ...mappedMsgs, ...pendingOptimistic],
           };
         });
       }
