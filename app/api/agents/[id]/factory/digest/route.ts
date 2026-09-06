@@ -1,0 +1,179 @@
+import { NextResponse } from 'next/server';
+import { Pool } from 'pg';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+
+    // 1. Cargar datos del agente
+    const { rows: agentRows } = await pool.query('SELECT * FROM ai_agents WHERE id = $1 LIMIT 1;', [id]);
+    if (!agentRows.length) {
+      return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 });
+    }
+    const agent = agentRows[0];
+
+    // 2. Cargar materia prima: Material de Estudio y Material Compartible
+    const { rows: knowledge } = await pool.query(
+      'SELECT * FROM ai_agent_knowledge WHERE agent_id = $1 ORDER BY created_at ASC;',
+      [id]
+    );
+
+    const studyFiles = knowledge.filter((k: any) => k.folder === 'material_estudio');
+    const shareableFiles = knowledge.filter((k: any) => k.folder === 'material_compartible');
+
+    if (studyFiles.length === 0 && shareableFiles.length === 0) {
+      return NextResponse.json({
+        error: 'No hay materia prima cargada. Sube al menos un archivo en Material de Estudio o Material Compartible para que La Fábrica pueda procesarlo.',
+      }, { status: 400 });
+    }
+
+    // 3. Preparar resumen de materia prima
+    const studySummary = studyFiles.map((f: any, idx: number) => {
+      return `--- Documento de Estudio #${idx + 1}: ${f.file_name} (${f.file_type}) ---
+${f.content_text || 'Ficha técnica / Manual cargado en el sistema.'}`;
+    }).join('\n\n');
+
+    const shareableSummary = shareableFiles.map((f: any, idx: number) => {
+      return `--- Archivo Compartible #${idx + 1}: ${f.file_name} (${f.file_type}) ---
+URL CDN: ${f.cdn_url || f.storage_url}
+Regla sugerida: ${f.trigger_rule || 'Enviar cuando el cliente pregunte o solicite demostración.'}
+Caption: ${f.suggested_caption || ''}`;
+    }).join('\n\n');
+
+    // 4. Determinar API Key y Proveedor (BYOK)
+    let apiKey = '';
+    if (agent.encrypted_api_key) {
+      apiKey = Buffer.from(agent.encrypted_api_key, 'base64').toString('utf8');
+    }
+
+    const provider = agent.llm_provider || 'anthropic';
+    const effectiveApiKey = apiKey || (provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY) || process.env.ANTHROPIC_API_KEY;
+
+    if (!effectiveApiKey) {
+      return NextResponse.json({
+        error: 'Falta configurar la API Key (BYOK) de Anthropic o OpenAI para este agente.',
+      }, { status: 400 });
+    }
+
+    // 5. El Prompt Maestro de la Fábrica de Conocimiento (Cóctel de Ventas y Psicología)
+    const masterPrompt = `Eres el Ingeniero Maestro de la Fábrica de Conocimiento de un CRM Agentico de Élite.
+Tu misión es procesar la MATERIA PRIMA proporcionada por una empresa y destilar el SEGUNDO CEREBRO del agente.
+
+El agente se llama: "${agent.name}"
+Misión: "${agent.mission_type === 'sales' ? 'Ventas y Cierre de Citas (Setter/Closer)' : 'Servicio al Cliente, Soporte y Fidelización'}"
+Rol: "${agent.role}"
+
+CRUCIAL: Debes tejer DATOS TÉCNICOS DUROS (especificaciones, medidas, certificaciones, componentes reales) con el CÓCTEL MAESTRO DE PERSUASIÓN Y PSICOLOGÍA:
+1. Donald Miller (StoryBrand SB7): El cliente es el HÉROE; el agente es el GUÍA que ofrece un Plan Claro de 3 Pasos.
+2. Chris Voss (Negociador FBI): Mirroring, Tactical Labeling ("Parece que te preocupa..."), preguntas con "Cómo"/"Qué" y búsqueda del "NO" que protege ("¿Sería mala idea si...?").
+3. Robert Cialdini (7 Leyes): Reciprocidad, Autoridad basada en datos, Prueba Social, Escasez real, Micro-compromisos.
+4. Alex Hormozi ($100M Offers): El "Mecanismo Único", maximizar certeza y reducir esfuerzo percibido a cero.
+5. Fórmula Híbrida del Usuario: Beneficio Emocional + Mecanismo Técnico Real (micras, PSI, materiales) + Future Pacing + Micro-CTA.
+
+Debes responder ÚNICAMENTE con un objeto JSON válido (sin código markdown exterior) con esta estructura exacta:
+{
+  "identidad_y_tono": "Contenido markdown para 01-identidad-y-tono.md...",
+  "mecanismos_tecnicos": "Contenido markdown para 02-mecanismos-tecnicos.md...",
+  "beneficios_y_future_pacing": "Contenido markdown para 03-beneficios-y-future-pacing.md...",
+  "matriz_de_objeciones": "Contenido markdown para 04-matriz-de-objeciones.md...",
+  "oferta_y_plan_storybrand": "Contenido markdown para 05-oferta-y-plan-storybrand.md...",
+  "reglas_de_oro": "Contenido markdown para 06-reglas-de-oro.md...",
+  "catalogo_maletin": "Contenido markdown para 07-catalogo-maletin.md..."
+}
+
+A continuación la MATERIA PRIMA del negocio:
+
+=== MATERIAL DE ESTUDIO (100% CONFIDENCIAL / SOLO PARA APRENDIZAJE) ===
+${studySummary || 'No se proporcionó texto explícito de estudio. Usa el contexto de la empresa y el nombre del agente.'}
+
+=== MATERIAL COMPARTIBLE (EL MALETÍN DE WHATSAPP / PARA ENVIAR A CLIENTES) ===
+${shareableSummary || 'Sin archivos multimedia registrados.'}`;
+
+    let generatedBrains: any = null;
+
+    // 6. Invocación al LLM
+    if (provider === 'anthropic' || effectiveApiKey.startsWith('sk-ant-')) {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': effectiveApiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: agent.llm_model || 'claude-3-5-sonnet-20241022',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content: masterPrompt }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error?.message || 'Error en llamada a Anthropic');
+      }
+
+      const resJson = await response.json();
+      const rawText = resJson.content?.[0]?.text || '';
+      // Limpiar posible bloque markdown ```json ... ```
+      const cleanJson = rawText.replace(/^\s*```(json)?/i, '').replace(/```\s*$/, '').trim();
+      generatedBrains = JSON.parse(cleanJson);
+    } else {
+      // OpenAI
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${effectiveApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: agent.llm_model || 'gpt-4o',
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content: masterPrompt }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error?.message || 'Error en llamada a OpenAI');
+      }
+
+      const resJson = await response.json();
+      const rawText = resJson.choices?.[0]?.message?.content || '{}';
+      generatedBrains = JSON.parse(rawText);
+    }
+
+    // 7. Guardar en ai_agent_brains
+    const brainDocs = [
+      { slug: '01-identidad-y-tono', title: 'Identidad, Tono y Voz Humana', content: generatedBrains.identidad_y_tono || '# Identidad y Tono' },
+      { slug: '02-mecanismos-tecnicos', title: 'Mecanismos Técnicos y Datos Duros', content: generatedBrains.mecanismos_tecnicos || '# Mecanismos Técnicos' },
+      { slug: '03-beneficios-y-future-pacing', title: 'Beneficios y Future Pacing', content: generatedBrains.beneficios_y_future_pacing || '# Beneficios y Transformación' },
+      { slug: '04-matriz-de-objeciones', title: 'Matriz de Objeciones y Negociación Voss', content: generatedBrains.matriz_de_objeciones || '# Matriz de Objeciones' },
+      { slug: '05-oferta-y-plan-storybrand', title: 'Oferta Irresistible y Plan StoryBrand', content: generatedBrains.oferta_y_plan_storybrand || '# Oferta y Plan' },
+      { slug: '06-reglas-de-oro', title: 'Reglas de Oro y Guardrails Inmutables', content: generatedBrains.reglas_de_oro || '# Reglas de Oro' },
+      { slug: '07-catalogo-maletin', title: 'Catálogo de Disparadores del Maletín', content: generatedBrains.catalogo_maletin || '# Maletín Compartible' },
+    ];
+
+    for (const doc of brainDocs) {
+      await pool.query(`
+        INSERT INTO ai_agent_brains (agent_id, file_slug, title, markdown_content, updated_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (agent_id, file_slug)
+        DO UPDATE SET title = EXCLUDED.title, markdown_content = EXCLUDED.markdown_content, version = ai_agent_brains.version + 1, updated_at = NOW();
+      `, [id, doc.slug, doc.title, doc.content]);
+    }
+
+    // Actualizar estado del agente a 'training' (listo para simulaciones)
+    await pool.query("UPDATE ai_agents SET status = 'training', updated_at = NOW() WHERE id = $1;", [id]);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Segundo Cerebro generado con éxito por La Fábrica de Conocimiento.',
+      brainDocs,
+    });
+  } catch (err: any) {
+    console.error('[Factory Digest] Error:', err.message);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
