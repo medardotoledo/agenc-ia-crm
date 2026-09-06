@@ -45,12 +45,10 @@ export async function POST(req: Request) {
     const key = data?.key || body.key;
     const message = data?.message || body.message;
 
-    // Ignorar mensajes salientes enviados por nosotros mismos
-    if (key?.fromMe) {
-      return NextResponse.json({ received: true, ignored: 'from_me' });
-    }
+    const isFromMe = Boolean(key?.fromMe);
 
-    const remoteJid = key?.remoteJid || body.sender || data?.sender;
+    // En WhatsApp con Evolution API v2, remoteJidAlt contiene el número telefónico real (ej: 19512548903@s.whatsapp.net)
+    const remoteJid = key?.remoteJidAlt || key?.remoteJid || body.sender || data?.sender;
     if (!remoteJid || remoteJid.includes('@g.us')) {
       return NextResponse.json({ received: true, ignored: 'group_or_no_jid' });
     }
@@ -163,8 +161,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5. Inyectar el mensaje en la conversación de GHL
+    // 5. Registrar el mensaje en la conversación de GHL (saliente o entrante)
     if (ghlContactId) {
+      if (isFromMe) {
+        // Mensaje saliente enviado por el usuario desde WhatsApp o desde el CRM
+        const outboundRes = await fetch('https://services.leadconnectorhq.com/conversations/messages', {
+          method: 'POST',
+          headers: ghlHeaders,
+          body: JSON.stringify({
+            type: 'Live_Chat',
+            contactId: ghlContactId,
+            message: textContent,
+          }),
+        });
+        const outData = await outboundRes.json().catch(() => ({}));
+        console.log('[Webhook WA] Outbound message synced to GHL:', outData);
+        return NextResponse.json({ success: true, outbound: true, contactId: ghlContactId, message: outData });
+      }
+
+      // Mensaje entrante recibido del cliente
       const inboundRes = await fetch('https://services.leadconnectorhq.com/conversations/messages/inbound', {
         method: 'POST',
         headers: ghlHeaders,
@@ -177,7 +192,7 @@ export async function POST(req: Request) {
       });
 
       const inboundData = await inboundRes.json().catch(() => ({}));
-      console.log('[Webhook WA] Message injected into GHL:', inboundData);
+      console.log('[Webhook WA] Inbound message injected into GHL:', inboundData);
       return NextResponse.json({ success: true, contactId: ghlContactId, message: inboundData });
     }
 

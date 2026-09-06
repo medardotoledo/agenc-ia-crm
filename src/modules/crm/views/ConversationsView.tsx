@@ -34,10 +34,10 @@ export default function ConversationsView() {
   const matchedLead = leads.find((l) => l.id === active?.leadId || l.contactId === active?.leadId)
   const lead = matchedLead || (active ? {
     id: active.leadId,
-    contactId: active.leadId,
-    name: 'Contacto WhatsApp',
+    contactId: active.contactId || active.leadId,
+    name: active.contactName || 'Contacto WhatsApp',
     company: '',
-    phone: '',
+    phone: active.phone || '',
     email: '',
     stage: 'nuevo',
     temperature: 'warm' as const,
@@ -54,15 +54,15 @@ export default function ConversationsView() {
   useEffect(() => {
     if (active?.leadId) {
       setLoadingChat(true)
-      loadLeadMessages(active.leadId, matchedLead?.contactId).finally(() => setLoadingChat(false))
+      loadLeadMessages(active.leadId, active.contactId || matchedLead?.contactId, active.conversationId).finally(() => setLoadingChat(false))
 
       const timer = setInterval(() => {
-        loadLeadMessages(active.leadId, matchedLead?.contactId)
+        loadLeadMessages(active.leadId, active.contactId || matchedLead?.contactId, active.conversationId)
       }, 7000)
 
       return () => clearInterval(timer)
     }
-  }, [active?.leadId, matchedLead?.contactId, loadLeadMessages])
+  }, [active?.leadId, active?.contactId, active?.conversationId, matchedLead?.contactId, loadLeadMessages])
 
   const send = () => {
     if (!text.trim() || !lead) return
@@ -99,7 +99,7 @@ export default function ConversationsView() {
         <div className="flex-1 overflow-y-auto">
           {convos.map((c) => {
             const l = leads.find((x) => x.id === c.leadId || x.contactId === c.leadId)
-            const name = l?.name || 'Contacto WhatsApp'
+            const name = c.contactName || l?.name || 'Contacto WhatsApp'
             const isActive = active?.leadId === c.leadId
             return (
               <button
@@ -134,16 +134,29 @@ export default function ConversationsView() {
         <div className="flex min-w-0 flex-1 flex-col bg-soft/40">
           {/* Header */}
           <div className="flex items-center gap-3 border-b border-line bg-app px-4 py-3">
-            <Avatar name={lead.name} />
+            <Avatar name={active?.contactName || lead.name} />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">{lead.name}</p>
+              <p className="truncate font-bold">{active?.contactName || lead.name}</p>
               <div className="flex items-center gap-2 text-xs text-ink-soft">
                 <span className="flex items-center gap-1 rounded-full bg-wa-bg px-2 py-0.5 font-semibold text-wa-text">
                   <ChannelDot channel={active.channel} size={12} /> {CHANNEL_LABEL[active.channel]}
                 </span>
-                <span className="hidden truncate sm:inline">{lead.company}</span>
+                <span className="hidden truncate sm:inline">{active?.phone || lead.phone || lead.company}</span>
               </div>
             </div>
+            <button
+              onClick={() => {
+                if (active) {
+                  setLoadingChat(true);
+                  loadLeadMessages(active.leadId, active.contactId || matchedLead?.contactId, active.conversationId).finally(() => setLoadingChat(false));
+                }
+              }}
+              className="flex items-center gap-1 text-xs font-semibold text-primary hover:bg-soft rounded-lg px-2.5 py-1.5 transition"
+              title="Actualizar mensajes"
+            >
+              <RefreshCw size={13} className={loadingChat ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Actualizar</span>
+            </button>
             <div className="hidden items-center gap-1 lg:flex">
               {[{ Icon: User, t: 'Ver perfil' }, { Icon: Phone, t: 'Llamar' }, { Icon: Kanban, t: 'Mover etapa' }, { Icon: UserPlus, t: 'Asignar' }, { Icon: Check, t: 'Resolver' }].map(({ Icon, t }) => (
                 <button key={t} onClick={() => t === 'Ver perfil' && openLead(lead.id)} title={t} className="rounded-lg border border-line p-2 text-ink-soft hover:bg-soft">

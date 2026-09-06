@@ -49,7 +49,7 @@ interface AppState {
   toggleSidebar: () => void;
   addNote: (leadId: string, type: NoteType, content: string) => void;
   sendMessage: (leadId: string, channel: Message['channel'], body: string) => void;
-  loadLeadMessages: (leadId: string, contactId?: string) => Promise<void>;
+  loadLeadMessages: (leadId: string, contactId?: string, conversationId?: string) => Promise<void>;
   /** Carga (o recarga) todos los datos del CRM para la subcuenta activa.
    *  Si el usuario es `agent` con `onlyAssigned`, solo ve sus propios leads. */
   loadAccountData: (
@@ -112,31 +112,40 @@ export const useApp = create<AppState>((set, get) => ({
       ),
     }));
     const lead = useLeads.getState().leads.find((l) => l.id === leadId);
-    if (lead && ctx) {
-      db.persistMessage(ctx.accountId, ctx.userId, lead, channel, body).catch((e) => console.warn('persistMessage:', e.message));
+    const convo = get().conversations.find((c) => c.leadId === leadId);
+    const targetPhone = lead?.phone || convo?.phone;
+    if (ctx) {
+      if (lead) {
+        db.persistMessage(ctx.accountId, ctx.userId, lead, channel, body).catch((e) => console.warn('persistMessage:', e.message));
+      }
       
-      if (channel === 'whatsapp' && lead.phone) {
+      if (channel === 'whatsapp' && targetPhone) {
         fetch('/api/whatsapp/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             instanceName: `wa_${ctx.accountId.replace(/[^a-zA-Z0-9]/g, '_')}`,
-            number: lead.phone.replace(/\D/g, ''),
+            number: targetPhone.replace(/\D/g, ''),
             text: body,
           })
         }).catch(err => console.error('Error enviando WhatsApp:', err));
       }
     }
   },
-  loadLeadMessages: async (leadId: string, contactId?: string) => {
+  loadLeadMessages: async (leadId: string, contactId?: string, conversationId?: string) => {
     const ctx = get().ctx;
     if (!ctx?.accountId) return;
     const leads = useLeads.getState().leads;
     const targetLead = leads.find((l) => l.id === leadId || l.contactId === leadId);
-    const effectiveContactId = contactId || targetLead?.contactId || leadId;
+    const convo = get().conversations.find((c) => c.leadId === leadId);
+    const effectiveConversationId = conversationId || convo?.conversationId;
+    const effectiveContactId = contactId || targetLead?.contactId || convo?.contactId || leadId;
 
     try {
-      const res = await fetch(`/api/ghl/conversations?locationId=${ctx.accountId}&contactId=${effectiveContactId}`);
+      const url = effectiveConversationId
+        ? `/api/ghl/conversations?locationId=${ctx.accountId}&conversationId=${effectiveConversationId}`
+        : `/api/ghl/conversations?locationId=${ctx.accountId}&contactId=${effectiveContactId}`;
+      const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
       if (data.messages && Array.isArray(data.messages)) {
@@ -144,7 +153,7 @@ export const useApp = create<AppState>((set, get) => ({
           id: m.id,
           leadId,
           channel: (m.channel as Message['channel']) || 'whatsapp',
-          direction: m.direction === 'inbound' ? 'in' : 'out',
+          direction: m.direction === 'inbound' || m.direction === 'in' ? 'in' : 'out',
           body: m.body || '',
           author: m.author,
           time: m.time || 'Ahora',

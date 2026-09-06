@@ -23,6 +23,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const locationId = searchParams.get('locationId') || searchParams.get('location_id') || 'OS9czz85LUvBeljk8FEv';
+    const conversationId = searchParams.get('conversationId');
     const contactId = searchParams.get('contactId');
 
     const accessToken = await getAccessToken(locationId);
@@ -32,26 +33,28 @@ export async function GET(req: Request) {
       Accept: 'application/json',
     };
 
-    // Caso 1: Obtener la conversación y mensajes de un contacto específico
-    if (contactId) {
-      const searchUrl = `https://services.leadconnectorhq.com/conversations/search?locationId=${locationId}&contactId=${contactId}`;
-      const searchRes = await fetch(searchUrl, { headers: ghlHeaders });
+    // Caso 1: Obtener la conversación y mensajes (por conversationId o contactId)
+    if (conversationId || contactId) {
+      let resolvedConversationId = conversationId;
+      let conversation: any = null;
 
-      if (!searchRes.ok) {
-        const errText = await searchRes.text();
-        console.error('[GHL Conversations Search Error]', errText);
-        return NextResponse.json({ conversation: null, messages: [] });
+      if (!resolvedConversationId && contactId) {
+        const searchUrl = `https://services.leadconnectorhq.com/conversations/search?locationId=${locationId}&contactId=${contactId}`;
+        const searchRes = await fetch(searchUrl, { headers: ghlHeaders });
+
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          conversation = searchData.conversations?.[0] || null;
+          resolvedConversationId = conversation?.id;
+        }
       }
 
-      const searchData = await searchRes.json();
-      const conversation = searchData.conversations?.[0] || null;
-
-      if (!conversation) {
+      if (!resolvedConversationId) {
         return NextResponse.json({ conversation: null, messages: [] });
       }
 
       // Obtener mensajes de la conversación
-      const msgUrl = `https://services.leadconnectorhq.com/conversations/${conversation.id}/messages`;
+      const msgUrl = `https://services.leadconnectorhq.com/conversations/${resolvedConversationId}/messages`;
       const msgRes = await fetch(msgUrl, { headers: ghlHeaders });
 
       let rawMessages: any[] = [];
@@ -71,17 +74,19 @@ export async function GET(req: Request) {
         else if (mType.includes('call')) channel = 'call';
         else if (mType.includes('sms')) channel = 'sms';
 
+        const isOutbound = m.direction === 'outbound';
+
         return {
           id: m.id,
           conversationId: m.conversationId,
           contactId: m.contactId,
-          direction: m.direction, // 'inbound' | 'outbound'
+          direction: isOutbound ? 'out' : 'in',
           body: m.body || (m.attachments?.length ? '📎 Archivo adjunto' : ''),
           attachments: m.attachments || [],
           channel,
           status: m.status,
           dateAdded: m.dateAdded,
-          author: m.direction === 'inbound' ? (conversation.contactName || conversation.fullName || 'Lead') : 'Agente',
+          author: isOutbound ? 'Agente' : (conversation?.contactName || conversation?.fullName || 'Lead'),
           time: new Date(m.dateAdded).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
         };
       });

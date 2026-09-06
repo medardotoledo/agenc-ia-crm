@@ -111,6 +111,10 @@ export async function fetchConversations(accountId: string, leads: Lead[]): Prom
 
       return {
         leadId: targetLeadId,
+        contactId: c.contactId,
+        conversationId: c.id,
+        contactName: c.contactName || c.fullName || (matchedLead ? matchedLead.name : 'Contacto WhatsApp'),
+        phone: c.phone || matchedLead?.phone || '',
         channel: 'whatsapp',
         preview: lastMsg.slice(0, 60),
         time: fmtDate(isoDate),

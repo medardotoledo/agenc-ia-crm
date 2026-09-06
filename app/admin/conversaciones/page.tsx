@@ -22,9 +22,13 @@ export default function ConversacionesPage() {
   if (!account) return null;
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-bold tracking-tight text-ink">Conversaciones</h1>
-      <ConversationsView />
+    <div className="flex flex-col h-[calc(100vh-140px)]">
+      <div className="flex items-center justify-between pb-3">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Conversaciones</h1>
+      </div>
+      <div className="flex-1 min-h-0 rounded-2xl border border-line bg-app overflow-hidden shadow-sm">
+        <ConversationsView />
+      </div>
     </div>
   );
 }

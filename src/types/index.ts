@@ -45,6 +45,10 @@ export interface Message {
 
 export interface Conversation {
   leadId: string
+  contactId?: string
+  conversationId?: string
+  contactName?: string
+  phone?: string
   channel: Channel
   preview: string
   time: string
