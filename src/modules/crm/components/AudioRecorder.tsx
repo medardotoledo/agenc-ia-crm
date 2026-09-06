@@ -21,6 +21,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const recordingStartTimeRef = useRef<number>(0);
 
   // Notificar al componente padre si el grabador está activo para ocultar el textarea y el botón de enviar duplicado
   useEffect(() => {
@@ -60,7 +61,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
@@ -73,6 +74,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
         stream.getTracks().forEach((track) => track.stop());
       };
 
+      recordingStartTimeRef.current = Date.now();
       recorder.start(100);
       setIsRecording(true);
       setRecordingTime(0);
@@ -115,6 +117,11 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
 
   const convertAndSend = async (blob: Blob, duration: number) => {
     if (isSending) return;
+    if (!blob || blob.size < 500) {
+      console.warn('Audio demasiado corto o vacío, descartando');
+      cancelRecording();
+      return;
+    }
     setIsSending(true);
     try {
       const reader = new FileReader();
@@ -139,6 +146,13 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
   const handleSend = () => {
     if (isSending) return;
 
+    const elapsedMs = Date.now() - recordingStartTimeRef.current;
+    // Si han pasado menos de 800ms desde que se inició la grabación, evitar clic accidental
+    if (elapsedMs < 800) {
+      console.warn('Click muy rápido en Enviar, ignorado');
+      return;
+    }
+
     if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       const currentDuration = recordingTime;
       mediaRecorderRef.current.addEventListener(
@@ -146,6 +160,11 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
         () => {
           const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
           const blob = new Blob(audioChunksRef.current, { type: mimeType });
+          if (!blob || blob.size < 500) {
+            console.warn('Audio vacío');
+            cancelRecording();
+            return;
+          }
           convertAndSend(blob, currentDuration);
         },
         { once: true }
@@ -155,6 +174,10 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
     }
 
     if (audioBlob) {
+      if (audioBlob.size < 500) {
+        cancelRecording();
+        return;
+      }
       convertAndSend(audioBlob, recordingTime);
     }
   };
@@ -264,7 +287,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange 
           <button
             type="button"
             onClick={handleSend}
-            disabled={isSending}
+            disabled={isSending || (isRecording && recordingTime === 0)}
             className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition disabled:opacity-50"
             title="Enviar nota de voz"
           >

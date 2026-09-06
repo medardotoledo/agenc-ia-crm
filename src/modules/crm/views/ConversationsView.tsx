@@ -490,7 +490,7 @@ export default function ConversationsView() {
             />
 
             <div className="flex items-end gap-2">
-              {!isRecordingAudio ? (
+              {!isRecordingAudio && (
                 <>
                   <div className="flex gap-1">
                     {/* Botón Adjuntar Archivo Local */}
@@ -536,32 +536,25 @@ export default function ConversationsView() {
                       replyChannel === 'internal' ? 'border-dashed border-ink-soft/40 bg-line-soft/50' : 'border-line bg-soft/50'
                     }`}
                   />
-
-                  {/* Botón de Grabar Audio en Vivo */}
-                  <AudioRecorder
-                    onSendAudio={handleSendAudio}
-                    onActiveChange={setIsRecordingAudio}
-                    disabled={replyChannel !== 'whatsapp'}
-                  />
-
-                  {/* Botón Enviar Texto o Archivo */}
-                  <button
-                    onClick={send}
-                    disabled={isSending || (!text.trim() && !pendingFile)}
-                    className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light transition shadow-sm disabled:opacity-40"
-                    aria-label="Enviar"
-                  >
-                    <Send size={16} />
-                  </button>
                 </>
-              ) : (
-                <div className="flex-1 w-full">
-                  <AudioRecorder
-                    onSendAudio={handleSendAudio}
-                    onActiveChange={setIsRecordingAudio}
-                    disabled={replyChannel !== 'whatsapp'}
-                  />
-                </div>
+              )}
+
+              {/* Grabador de Audio en Vivo (única instancia permanente) */}
+              <AudioRecorder
+                onSendAudio={handleSendAudio}
+                onActiveChange={setIsRecordingAudio}
+                disabled={replyChannel !== 'whatsapp'}
+              />
+
+              {!isRecordingAudio && (
+                <button
+                  onClick={send}
+                  disabled={isSending || (!text.trim() && !pendingFile)}
+                  className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light transition shadow-sm disabled:opacity-40"
+                  aria-label="Enviar"
+                >
+                  <Send size={16} />
+                </button>
               )}
             </div>
           </div>

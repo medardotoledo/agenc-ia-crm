@@ -671,7 +671,7 @@ export default function LeadPanel() {
                 className="hidden"
               />
               <div className="flex items-end gap-2">
-                {!isRecordingAudio ? (
+                {!isRecordingAudio && (
                   <>
                     <div className="flex gap-1">
                       <button
@@ -705,30 +705,25 @@ export default function LeadPanel() {
                       rows={2}
                       className="flex-1 resize-none rounded-lg border border-line bg-soft/50 p-3 text-sm outline-none focus:border-primary-light"
                     />
-
-                    <AudioRecorder
-                      onSendAudio={handleSendAudio}
-                      onActiveChange={setIsRecordingAudio}
-                      disabled={lead.channels[0] !== 'whatsapp' && lead.channels.length > 0 && !lead.phone}
-                    />
-
-                    <button
-                      onClick={sendChat}
-                      disabled={isSending || (!chatText.trim() && !pendingFile)}
-                      className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light transition shadow-sm disabled:opacity-40"
-                      aria-label="Enviar"
-                    >
-                      <Send size={16} />
-                    </button>
                   </>
-                ) : (
-                  <div className="flex-1 w-full">
-                    <AudioRecorder
-                      onSendAudio={handleSendAudio}
-                      onActiveChange={setIsRecordingAudio}
-                      disabled={lead.channels[0] !== 'whatsapp' && lead.channels.length > 0 && !lead.phone}
-                    />
-                  </div>
+                )}
+
+                {/* Grabador de Audio en Vivo (única instancia permanente) */}
+                <AudioRecorder
+                  onSendAudio={handleSendAudio}
+                  onActiveChange={setIsRecordingAudio}
+                  disabled={lead.channels[0] !== 'whatsapp' && lead.channels.length > 0 && !lead.phone}
+                />
+
+                {!isRecordingAudio && (
+                  <button
+                    onClick={sendChat}
+                    disabled={isSending || (!chatText.trim() && !pendingFile)}
+                    className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light transition shadow-sm disabled:opacity-40"
+                    aria-label="Enviar"
+                  >
+                    <Send size={16} />
+                  </button>
                 )}
               </div>
             </div>
