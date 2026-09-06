@@ -217,9 +217,9 @@ export default function ConversationsView() {
 
         {/* Archivos adjuntos / multimedia */}
         {attachments.map((att, idx) => {
-          const isAudio = att.includes('audio') || att.includes('.mp3') || att.includes('.ogg') || att.includes('.opus') || att.includes('.wav') || m.body.includes('Nota de voz')
-          const isVideo = att.includes('.mp4') || att.includes('.mov') || att.includes('.webm') || att.includes('video/')
-          const isImage = att.includes('image/') || att.match(/\.(png|jpg|jpeg|webp|gif)/i)
+          const isAudio = att.includes('audio') || att.includes('.mp3') || att.includes('.ogg') || att.includes('.opus') || att.includes('.wav') || m.body.toLowerCase().includes('nota de voz') || m.body.toLowerCase().includes('audio')
+          const isVideo = att.includes('.mp4') || att.includes('.mov') || att.includes('.webm') || att.includes('video/') || m.body.toLowerCase().includes('video')
+          const isImage = att.includes('image/') || att.match(/\.(png|jpg|jpeg|webp|gif)/i) || m.body.toLowerCase().includes('foto') || m.body.toLowerCase().includes('imagen')
 
           if (isAudio) {
             return (

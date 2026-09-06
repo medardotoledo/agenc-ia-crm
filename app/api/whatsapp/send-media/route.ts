@@ -77,6 +77,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Faltan parámetros requeridos (instanceName, number, media)' }, { status: 400 });
     }
 
+    // Limpieza de formato Base64 para Evolution API
+    // Evolution API rechaza data URIs como 'data:image/png;base64,...' -> requiere raw base64 o URL
+    let cleanMedia = media;
+    let mimeType = body.mimeType || getMimeType(fileName, mediaType);
+
+    if (typeof media === 'string' && media.startsWith('data:')) {
+      const match = media.match(/^data:([^;]+);base64,(.+)$/s);
+      if (match) {
+        mimeType = match[1] || mimeType;
+        cleanMedia = match[2];
+      } else {
+        cleanMedia = media.replace(/^data:[^;]+;base64,/, '');
+      }
+    }
+
     const cleanNumber = number.replace(/\D/g, '');
     const urlsToTry = [
       EVOLUTION_API_URL,
@@ -95,7 +110,7 @@ export async function POST(req: Request) {
       // Enviar como Nota de Voz Nativa de WhatsApp (PTT)
       const payload = {
         number: cleanNumber,
-        audio: media,
+        audio: cleanMedia,
         encoding: true,
       };
 
@@ -117,13 +132,12 @@ export async function POST(req: Request) {
       }
     } else {
       // Enviar como Archivo Multimedia (Video, Imagen, Documento, Audio)
-      const mimeType = body.mimeType || getMimeType(fileName, mediaType);
       const payload = {
         number: cleanNumber,
         mediatype: mediaType,
         mimetype: mimeType,
         caption: caption || '',
-        media: media,
+        media: cleanMedia,
         fileName: fileName || (mediaType === 'video' ? 'video.mp4' : mediaType === 'document' ? 'document.pdf' : 'archivo'),
       };
 
@@ -177,15 +191,49 @@ export async function POST(req: Request) {
       }
 
       if (ghlContactId) {
+        let cdnUrl: string | null = null;
         const isUrl = typeof media === 'string' && (media.startsWith('http://') || media.startsWith('https://'));
-        const attachments = isUrl ? [media] : [];
+
+        if (isUrl) {
+          cdnUrl = media;
+        } else if (cleanMedia) {
+          // Subir archivo base64 a la biblioteca de GoHighLevel para generar URL pública compatible con GHL Conversations
+          try {
+            const buffer = Buffer.from(cleanMedia, 'base64');
+            const blob = new Blob([buffer], { type: mimeType });
+            const form = new FormData();
+            const effectiveName = fileName || (isVoiceNote ? `nota_voz_${Date.now()}.ogg` : `archivo_${Date.now()}`);
+            form.append('file', blob, effectiveName);
+            form.append('name', effectiveName);
+            form.append('altId', effectiveAccountId);
+            form.append('altType', 'location');
+
+            const upRes = await fetch('https://services.leadconnectorhq.com/medias/upload-file', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${ghlToken}`,
+                Version: '2021-07-28',
+              },
+              body: form,
+            });
+
+            if (upRes.ok) {
+              const upData = await upRes.json();
+              if (upData.url) cdnUrl = upData.url;
+            }
+          } catch (upErr: any) {
+            console.warn('[Send Media WA] Upload to GHL media error:', upErr.message);
+          }
+        }
+
+        const attachments = cdnUrl ? [cdnUrl] : [];
         const displayMsg = caption
           ? `${caption} ${fileName ? `[${fileName}]` : ''}`
           : isVoiceNote
-          ? '🎤 Nota de voz enviada'
+          ? '🎤 Nota de voz'
           : fileName
           ? `📎 ${fileName}`
-          : `📎 Archivo ${mediaType} enviado`;
+          : `📎 Archivo ${mediaType}`;
 
         await fetch('https://services.leadconnectorhq.com/conversations/messages', {
           method: 'POST',
@@ -197,7 +245,7 @@ export async function POST(req: Request) {
             ...(attachments.length > 0 ? { attachments } : {}),
           }),
         });
-        console.log('[Send Media WA] Outbound media synced to GHL for contact:', ghlContactId);
+        console.log('[Send Media WA] Outbound media synced to GHL for contact:', ghlContactId, 'CDN Url:', cdnUrl);
       }
     } catch (ghlErr: any) {
       console.warn('[Send Media WA] Could not sync outbound media to GHL:', ghlErr.message);

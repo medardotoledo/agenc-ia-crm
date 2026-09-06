@@ -28,6 +28,41 @@ async function getGHLToken(accountId: string): Promise<string> {
   return process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966';
 }
 
+async function fetchBase64FromEvolution(instance: string, key: any): Promise<string | null> {
+  const urls = [
+    process.env.EVOLUTION_API_URL || 'http://localhost:8080',
+    'http://2.24.65.127:8085',
+    'http://evolution-api:8080',
+    'http://localhost:8085',
+    'http://host.docker.internal:8085',
+    'http://172.17.0.1:8085',
+  ];
+  const apiKey = process.env.EVOLUTION_API_KEY || 'agencia_secret_wa_key_2026';
+
+  for (const baseUrl of urls) {
+    try {
+      const res = await fetch(`${baseUrl}/chat/getBase64FromMediaMessage/${instance}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: apiKey,
+        },
+        body: JSON.stringify({
+          message: { key },
+          convertToMp4: false,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.base64) return data.base64;
+      }
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -47,14 +82,22 @@ export async function POST(req: Request) {
 
     const isFromMe = Boolean(key?.fromMe);
 
-    // En WhatsApp con Evolution API v2, remoteJidAlt contiene el número telefónico real (ej: 19512548903@s.whatsapp.net)
+    // En WhatsApp con Evolution API v2, remoteJidAlt contiene el número telefónico real
     const remoteJid = key?.remoteJidAlt || key?.remoteJid || body.sender || data?.sender;
     if (!remoteJid || remoteJid.includes('@g.us')) {
       return NextResponse.json({ received: true, ignored: 'group_or_no_jid' });
     }
 
+    // Detectar si el mensaje contiene multimedia
+    const isImage = Boolean(message?.imageMessage);
+    const isVideo = Boolean(message?.videoMessage);
+    const isAudio = Boolean(message?.audioMessage);
+    const isDocument = Boolean(message?.documentMessage);
+    const isSticker = Boolean(message?.stickerMessage);
+    const hasMedia = isImage || isVideo || isAudio || isDocument || isSticker;
+
     // Extraer texto del mensaje
-    const textContent =
+    let textContent =
       message?.conversation ||
       message?.extendedTextMessage?.text ||
       message?.imageMessage?.caption ||
@@ -62,8 +105,22 @@ export async function POST(req: Request) {
       message?.documentMessage?.caption ||
       '';
 
-    if (!textContent) {
-      return NextResponse.json({ received: true, ignored: 'no_text' });
+    // Si no trae texto pero es un archivo o audio, asignar una descripción amigable en lugar de ignorarlo
+    if (!textContent && hasMedia) {
+      if (isImage) textContent = '📷 Foto recibida';
+      else if (isVideo) textContent = '🎥 Video recibido';
+      else if (isAudio) textContent = '🎤 Nota de voz recibida';
+      else if (isDocument) {
+        const docName = message?.documentMessage?.fileName || 'documento';
+        textContent = `📎 Documento: ${docName}`;
+      } else if (isSticker) {
+        textContent = '🎨 Sticker recibido';
+      }
+    }
+
+    // Si definitivamente no hay contenido ni multimedia, descartar
+    if (!textContent && !hasMedia) {
+      return NextResponse.json({ received: true, ignored: 'no_content' });
     }
 
     const senderName = data?.pushName || body.pushName || 'WhatsApp Contact';
@@ -97,7 +154,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Fallback: si en México tiene el '1' (ej: +521...) o no lo tiene (+52...)
+    // Fallback para números con/sin prefijo local
     if (!ghlContactId && phoneWithPlus.startsWith('+521')) {
       const altPhone = `+52${phoneWithPlus.slice(4)}`;
       const searchUrl2 = `https://services.leadconnectorhq.com/contacts/?query=${encodeURIComponent(altPhone)}&locationId=${accountId}`;
@@ -139,7 +196,6 @@ export async function POST(req: Request) {
         if (oppSearchRes.ok) {
           const oppSearchData = await oppSearchRes.json();
           if (!oppSearchData.opportunities || oppSearchData.opportunities.length === 0) {
-            // No tiene oportunidad activa, crearla en la etapa inicial "Lead Nuevo"
             await fetch('https://services.leadconnectorhq.com/opportunities/', {
               method: 'POST',
               headers: { ...ghlHeaders, Version: '2021-07-28' },
@@ -161,10 +217,70 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5. Registrar el mensaje en la conversación de GHL (saliente o entrante)
+    // 5. Procesar multimedia si existe para obtener una URL pública (GHL Media CDN)
+    let cdnUrl: string | null = null;
+    if (hasMedia) {
+      try {
+        let base64Media = data?.base64 || data?.message?.base64 || body?.base64;
+        if (!base64Media && instance && key) {
+          base64Media = await fetchBase64FromEvolution(instance, key);
+        }
+
+        if (base64Media) {
+          const rawBase64 = base64Media.replace(/^data:[^;]+;base64,/, '');
+          let mimeType = 'application/octet-stream';
+          let fileName = `archivo_${Date.now()}`;
+
+          if (isImage) {
+            mimeType = message?.imageMessage?.mimetype || 'image/jpeg';
+            fileName = `foto_${Date.now()}.jpg`;
+          } else if (isVideo) {
+            mimeType = message?.videoMessage?.mimetype || 'video/mp4';
+            fileName = `video_${Date.now()}.mp4`;
+          } else if (isAudio) {
+            mimeType = message?.audioMessage?.mimetype || 'audio/ogg';
+            fileName = `audio_${Date.now()}.ogg`;
+          } else if (isDocument) {
+            mimeType = message?.documentMessage?.mimetype || 'application/pdf';
+            fileName = message?.documentMessage?.fileName || `documento_${Date.now()}.pdf`;
+          }
+
+          const buffer = Buffer.from(rawBase64, 'base64');
+          const blob = new Blob([buffer], { type: mimeType });
+          const form = new FormData();
+          form.append('file', blob, fileName);
+          form.append('name', fileName);
+          form.append('altId', accountId);
+          form.append('altType', 'location');
+
+          const upRes = await fetch('https://services.leadconnectorhq.com/medias/upload-file', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${ghlToken}`,
+              Version: '2021-07-28',
+            },
+            body: form,
+          });
+
+          if (upRes.ok) {
+            const upData = await upRes.json();
+            if (upData.url) cdnUrl = upData.url;
+            console.log('[Webhook WA] Inbound media uploaded to GHL CDN:', cdnUrl);
+          } else {
+            console.warn('[Webhook WA] Upload to GHL media failed status:', upRes.status);
+          }
+        }
+      } catch (mediaErr: any) {
+        console.warn('[Webhook WA] Error processing inbound media:', mediaErr.message);
+      }
+    }
+
+    // 6. Registrar el mensaje en la conversación de GHL (saliente o entrante)
     if (ghlContactId) {
+      const attachments = cdnUrl ? [cdnUrl] : [];
+
       if (isFromMe) {
-        // Mensaje saliente enviado por el usuario desde WhatsApp o desde el CRM
+        // Mensaje saliente enviado desde WhatsApp celular
         const outboundRes = await fetch('https://services.leadconnectorhq.com/conversations/messages', {
           method: 'POST',
           headers: ghlHeaders,
@@ -172,6 +288,7 @@ export async function POST(req: Request) {
             type: 'Live_Chat',
             contactId: ghlContactId,
             message: textContent,
+            ...(attachments.length > 0 ? { attachments } : {}),
           }),
         });
         const outData = await outboundRes.json().catch(() => ({}));
@@ -188,6 +305,7 @@ export async function POST(req: Request) {
           contactId: ghlContactId,
           message: textContent,
           body: textContent,
+          ...(attachments.length > 0 ? { attachments } : {}),
         }),
       });
 
