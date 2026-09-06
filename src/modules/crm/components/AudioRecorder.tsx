@@ -5,9 +5,10 @@ interface AudioRecorderProps {
   onSendAudio: (audioBase64: string, durationSeconds: number) => Promise<void> | void;
   onCancel?: () => void;
   disabled?: boolean;
+  onActiveChange?: (isActive: boolean) => void;
 }
 
-export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorderProps) {
+export function AudioRecorder({ onSendAudio, onCancel, disabled, onActiveChange }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -20,6 +21,11 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+
+  // Notificar al componente padre si el grabador está activo para ocultar el textarea y el botón de enviar duplicado
+  useEffect(() => {
+    onActiveChange?.(Boolean(isRecording || audioBlob));
+  }, [isRecording, audioBlob, onActiveChange]);
 
   useEffect(() => {
     return () => {
@@ -108,6 +114,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
   };
 
   const convertAndSend = async (blob: Blob, duration: number) => {
+    if (isSending) return;
     setIsSending(true);
     try {
       const reader = new FileReader();
@@ -130,6 +137,8 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
   };
 
   const handleSend = () => {
+    if (isSending) return;
+
     if (isRecording && mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       const currentDuration = recordingTime;
       mediaRecorderRef.current.addEventListener(
@@ -174,7 +183,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
 
   if (errorMsg) {
     return (
-      <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs text-red-600">
+      <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-600 w-full">
         <AlertCircle size={14} className="shrink-0" />
         <span className="truncate">{errorMsg}</span>
         <button onClick={() => setErrorMsg(null)} className="ml-auto font-bold hover:underline">OK</button>
@@ -184,22 +193,22 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
 
   if (isRecording || audioBlob) {
     return (
-      <div className="flex flex-1 items-center gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
+      <div className="flex flex-1 items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 w-full shadow-sm animate-fadeIn">
         {/* Pulsing indicator or Play button */}
         <div className="flex items-center gap-2">
           {isRecording ? (
-            <span className="relative flex h-3 w-3">
+            <span className="relative flex h-3.5 w-3.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
+              <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-red-500" />
             </span>
           ) : (
             <button
               type="button"
               onClick={togglePlayback}
-              className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm"
               title={isPlaying ? 'Pausar' : 'Escuchar audio grabado'}
             >
-              {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-0.5" />}
+              {isPlaying ? <Pause size={13} /> : <Play size={13} className="ml-0.5" />}
             </button>
           )}
           <span className="font-mono text-xs font-bold text-ink">
@@ -209,33 +218,33 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
 
         {/* Audio waveform simulation */}
         <div className="flex flex-1 items-center gap-1 overflow-hidden px-2">
-          {Array.from({ length: 16 }).map((_, i) => (
+          {Array.from({ length: 20 }).map((_, i) => (
             <span
               key={i}
-              className={`h-4 w-1 rounded-full ${isRecording ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-400'}`}
+              className={`w-1 rounded-full transition-all duration-150 ${isRecording ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-400'}`}
               style={{
-                height: isRecording ? `${Math.max(6, ((i * 7 + recordingTime * 13) % 24))}px` : '10px',
-                animationDelay: `${(i % 5) * 120}ms`,
+                height: isRecording ? `${Math.max(6, ((i * 7 + recordingTime * 13) % 22))}px` : '10px',
+                animationDelay: `${(i % 5) * 100}ms`,
               }}
             />
           ))}
-          <span className="text-[11px] text-ink-soft ml-2 truncate">
+          <span className="text-[11px] text-ink-soft ml-2 truncate font-medium">
             {isSending
-              ? 'Enviando nota de voz...'
+              ? 'Enviando nota de voz por WhatsApp...'
               : isRecording
               ? 'Grabando nota de voz...'
-              : 'Nota de voz lista'}
+              : 'Nota de voz lista para enviar'}
           </span>
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={cancelRecording}
             disabled={isSending}
-            className="rounded-full p-1.5 text-ink-soft hover:bg-soft hover:text-red-600 transition disabled:opacity-50"
-            title="Cancelar grabación"
+            className="rounded-full p-2 text-ink-soft hover:bg-red-100 hover:text-red-600 transition disabled:opacity-50"
+            title="Cancelar y descartar audio"
           >
             <Trash2 size={16} />
           </button>
@@ -245,7 +254,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
               type="button"
               onClick={stopRecording}
               disabled={isSending}
-              className="rounded-full bg-soft p-1.5 text-ink hover:bg-line transition disabled:opacity-50"
+              className="rounded-full bg-soft p-2 text-ink hover:bg-line transition disabled:opacity-50"
               title="Detener y escuchar antes de enviar"
             >
               <Square size={15} />
@@ -256,7 +265,7 @@ export function AudioRecorder({ onSendAudio, onCancel, disabled }: AudioRecorder
             type="button"
             onClick={handleSend}
             disabled={isSending}
-            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition disabled:opacity-50"
             title="Enviar nota de voz"
           >
             {isSending ? (

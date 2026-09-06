@@ -279,6 +279,8 @@ export default function LeadPanel() {
 
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false)
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false)
+  const [isSending, setIsSending] = useState(false)
   const [pendingFile, setPendingFile] = useState<{
     file: File;
     previewUrl: string;
@@ -351,36 +353,46 @@ export default function LeadPanel() {
   }
 
   const sendChat = async () => {
-    if (!lead) return
-    if (pendingFile) {
-      await sendMediaMessage(lead.id, {
-        media: pendingFile.base64,
-        mediaType: pendingFile.mediaType,
-        fileName: pendingFile.file.name,
-        caption: chatText.trim() || undefined,
-      })
-      setPendingFile(null)
-      setChatText('')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      scrollToBottom()
-      return
-    }
+    if (isSending || !lead) return
+    setIsSending(true)
+    try {
+      if (pendingFile) {
+        await sendMediaMessage(lead.id, {
+          media: pendingFile.base64,
+          mediaType: pendingFile.mediaType,
+          fileName: pendingFile.file.name,
+          caption: chatText.trim() || undefined,
+        })
+        setPendingFile(null)
+        setChatText('')
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        scrollToBottom()
+        return
+      }
 
-    if (!chatText.trim()) return
-    sendMessage(lead.id, lead.channels[0] ?? 'whatsapp', chatText.trim())
-    setChatText('')
-    scrollToBottom()
+      if (!chatText.trim()) return
+      sendMessage(lead.id, lead.channels[0] ?? 'whatsapp', chatText.trim())
+      setChatText('')
+      scrollToBottom()
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const handleSendAudio = async (audioBase64: string) => {
-    if (!lead) return
-    await sendMediaMessage(lead.id, {
-      media: audioBase64,
-      mediaType: 'audio',
-      fileName: `audio_${Date.now()}.ogg`,
-      isVoiceNote: true,
-    })
-    scrollToBottom()
+    if (isSending || !lead) return
+    setIsSending(true)
+    try {
+      await sendMediaMessage(lead.id, {
+        media: audioBase64,
+        mediaType: 'audio',
+        fileName: `audio_${Date.now()}.ogg`,
+        isVoiceNote: true,
+      })
+      scrollToBottom()
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const handleSendFromLibrary = async (media: { url: string; fileType: string; name: string; caption?: string }) => {
@@ -659,47 +671,65 @@ export default function LeadPanel() {
                 className="hidden"
               />
               <div className="flex items-end gap-2">
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-ink transition"
-                    title="Adjuntar archivo local"
-                  >
-                    <Paperclip size={16} />
-                  </button>
-                  <button
-                    onClick={() => setMediaLibraryOpen(true)}
-                    className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
-                    title="Biblioteca multimedia GHL"
-                  >
-                    <Folder size={16} />
-                  </button>
-                  <button
-                    onClick={() => setTemplatesOpen(true)}
-                    className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
-                    title="Plantillas y respuestas rápidas"
-                  >
-                    <LayoutTemplate size={16} />
-                  </button>
-                </div>
+                {!isRecordingAudio ? (
+                  <>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-ink transition"
+                        title="Adjuntar archivo local"
+                      >
+                        <Paperclip size={16} />
+                      </button>
+                      <button
+                        onClick={() => setMediaLibraryOpen(true)}
+                        className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
+                        title="Biblioteca multimedia GHL"
+                      >
+                        <Folder size={16} />
+                      </button>
+                      <button
+                        onClick={() => setTemplatesOpen(true)}
+                        className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
+                        title="Plantillas y respuestas rápidas"
+                      >
+                        <LayoutTemplate size={16} />
+                      </button>
+                    </div>
 
-                <textarea
-                  value={chatText}
-                  onChange={(e) => setChatText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat() } }}
-                  placeholder={`Mensaje por ${CHANNEL_LABEL[lead.channels[0] ?? 'whatsapp']}…`}
-                  rows={2}
-                  className="flex-1 resize-none rounded-lg border border-line bg-soft/50 p-3 text-sm outline-none focus:border-primary-light"
-                />
+                    <textarea
+                      value={chatText}
+                      onChange={(e) => setChatText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat() } }}
+                      placeholder={`Mensaje por ${CHANNEL_LABEL[lead.channels[0] ?? 'whatsapp']}…`}
+                      rows={2}
+                      className="flex-1 resize-none rounded-lg border border-line bg-soft/50 p-3 text-sm outline-none focus:border-primary-light"
+                    />
 
-                <AudioRecorder
-                  onSendAudio={handleSendAudio}
-                  disabled={lead.channels[0] !== 'whatsapp' && lead.channels.length > 0 && !lead.phone}
-                />
+                    <AudioRecorder
+                      onSendAudio={handleSendAudio}
+                      onActiveChange={setIsRecordingAudio}
+                      disabled={lead.channels[0] !== 'whatsapp' && lead.channels.length > 0 && !lead.phone}
+                    />
 
-                <button onClick={sendChat} className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light" aria-label="Enviar">
-                  <Send size={16} />
-                </button>
+                    <button
+                      onClick={sendChat}
+                      disabled={isSending || (!chatText.trim() && !pendingFile)}
+                      className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light transition shadow-sm disabled:opacity-40"
+                      aria-label="Enviar"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex-1 w-full">
+                    <AudioRecorder
+                      onSendAudio={handleSendAudio}
+                      onActiveChange={setIsRecordingAudio}
+                      disabled={lead.channels[0] !== 'whatsapp' && lead.channels.length > 0 && !lead.phone}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

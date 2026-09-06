@@ -63,6 +63,8 @@ export default function ConversationsView() {
   // Modales
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false)
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false)
+  const [isSending, setIsSending] = useState(false)
 
   // Adjunto local pendiente
   const [pendingFile, setPendingFile] = useState<{
@@ -150,42 +152,51 @@ export default function ConversationsView() {
   }
 
   const send = async () => {
-    if (!lead) return
+    if (isSending || !lead) return
+    setIsSending(true)
+    try {
+      // Si hay un archivo adjunto local pendiente
+      if (pendingFile) {
+        await sendMediaMessage(lead.id, {
+          media: pendingFile.base64,
+          mediaType: pendingFile.mediaType,
+          fileName: pendingFile.file.name,
+          caption: text.trim() || undefined,
+        })
+        setPendingFile(null)
+        setText('')
+        setAiMode('agent')
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        scrollToBottom()
+        return
+      }
 
-    // Si hay un archivo adjunto local pendiente
-    if (pendingFile) {
-      await sendMediaMessage(lead.id, {
-        media: pendingFile.base64,
-        mediaType: pendingFile.mediaType,
-        fileName: pendingFile.file.name,
-        caption: text.trim() || undefined,
-      })
-      setPendingFile(null)
+      if (!text.trim()) return
+      sendMessage(lead.id, replyChannel === 'internal' ? 'internal' : replyChannel, text.trim())
       setText('')
       setAiMode('agent')
-      if (fileInputRef.current) fileInputRef.current.value = ''
       scrollToBottom()
-      return
+    } finally {
+      setIsSending(false)
     }
-
-    if (!text.trim()) return
-    sendMessage(lead.id, replyChannel === 'internal' ? 'internal' : replyChannel, text.trim())
-    setText('')
-    setAiMode('agent')
-    scrollToBottom()
   }
 
   // Envío de nota de voz grabada en vivo
   const handleSendAudio = async (audioBase64: string) => {
-    if (!lead) return
-    await sendMediaMessage(lead.id, {
-      media: audioBase64,
-      mediaType: 'audio',
-      fileName: `audio_${Date.now()}.ogg`,
-      isVoiceNote: true,
-    })
-    setAiMode('agent')
-    scrollToBottom()
+    if (isSending || !lead) return
+    setIsSending(true)
+    try {
+      await sendMediaMessage(lead.id, {
+        media: audioBase64,
+        mediaType: 'audio',
+        fileName: `audio_${Date.now()}.ogg`,
+        isVoiceNote: true,
+      })
+      setAiMode('agent')
+      scrollToBottom()
+    } finally {
+      setIsSending(false)
+    }
   }
 
   // Envío desde la biblioteca multimedia de GoHighLevel
@@ -479,65 +490,79 @@ export default function ConversationsView() {
             />
 
             <div className="flex items-end gap-2">
-              <div className="flex gap-1">
-                {/* Botón Adjuntar Archivo Local */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-ink transition"
-                  title="Adjuntar imagen, video o documento local"
-                >
-                  <Paperclip size={18} />
-                </button>
+              {!isRecordingAudio ? (
+                <>
+                  <div className="flex gap-1">
+                    {/* Botón Adjuntar Archivo Local */}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-ink transition"
+                      title="Adjuntar imagen, video o documento local"
+                    >
+                      <Paperclip size={18} />
+                    </button>
 
-                {/* Botón Biblioteca Multimedia de GoHighLevel */}
-                <button
-                  onClick={() => setMediaLibraryOpen(true)}
-                  className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
-                  title="Biblioteca de Archivos y Videos GHL"
-                >
-                  <Folder size={18} />
-                </button>
+                    {/* Botón Biblioteca Multimedia de GoHighLevel */}
+                    <button
+                      onClick={() => setMediaLibraryOpen(true)}
+                      className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
+                      title="Biblioteca de Archivos y Videos GHL"
+                    >
+                      <Folder size={18} />
+                    </button>
 
-                {/* Botón Plantillas de Respuesta GoHighLevel */}
-                <button
-                  onClick={() => setTemplatesOpen(true)}
-                  className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
-                  title="Plantillas y Respuestas Rápidas"
-                >
-                  <LayoutTemplate size={18} />
-                </button>
-              </div>
+                    {/* Botón Plantillas de Respuesta GoHighLevel */}
+                    <button
+                      onClick={() => setTemplatesOpen(true)}
+                      className="rounded-lg p-2 text-ink-soft hover:bg-soft hover:text-primary transition"
+                      title="Plantillas y Respuestas Rápidas"
+                    >
+                      <LayoutTemplate size={18} />
+                    </button>
+                  </div>
 
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    send()
-                  }
-                }}
-                placeholder={placeholder}
-                rows={2}
-                className={`flex-1 resize-none rounded-lg border p-3 text-sm outline-none focus:border-primary-light ${
-                  replyChannel === 'internal' ? 'border-dashed border-ink-soft/40 bg-line-soft/50' : 'border-line bg-soft/50'
-                }`}
-              />
+                  <textarea
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        send()
+                      }
+                    }}
+                    placeholder={placeholder}
+                    rows={2}
+                    className={`flex-1 resize-none rounded-lg border p-3 text-sm outline-none focus:border-primary-light ${
+                      replyChannel === 'internal' ? 'border-dashed border-ink-soft/40 bg-line-soft/50' : 'border-line bg-soft/50'
+                    }`}
+                  />
 
-              {/* Botón de Grabar Audio en Vivo */}
-              <AudioRecorder
-                onSendAudio={handleSendAudio}
-                disabled={replyChannel !== 'whatsapp'}
-              />
+                  {/* Botón de Grabar Audio en Vivo */}
+                  <AudioRecorder
+                    onSendAudio={handleSendAudio}
+                    onActiveChange={setIsRecordingAudio}
+                    disabled={replyChannel !== 'whatsapp'}
+                  />
 
-              {/* Botón Enviar Texto o Archivo */}
-              <button
-                onClick={send}
-                className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light transition shadow-sm"
-                aria-label="Enviar"
-              >
-                <Send size={16} />
-              </button>
+                  {/* Botón Enviar Texto o Archivo */}
+                  <button
+                    onClick={send}
+                    disabled={isSending || (!text.trim() && !pendingFile)}
+                    className="rounded-lg bg-primary p-2.5 text-inverse hover:bg-primary-light transition shadow-sm disabled:opacity-40"
+                    aria-label="Enviar"
+                  >
+                    <Send size={16} />
+                  </button>
+                </>
+              ) : (
+                <div className="flex-1 w-full">
+                  <AudioRecorder
+                    onSendAudio={handleSendAudio}
+                    onActiveChange={setIsRecordingAudio}
+                    disabled={replyChannel !== 'whatsapp'}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
