@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SecondBrainGraph } from '../components/SecondBrainGraph';
 import {
   Globe,
@@ -34,7 +34,10 @@ import {
   Layers,
   Sparkles,
   ArrowLeft,
-  Check
+  Check,
+  Mic,
+  MicOff,
+  Volume2
 } from 'lucide-react';
 
 export interface ModelOption {
@@ -155,6 +158,24 @@ export default function AgentsFactoryView() {
   const [scrapeInlineSuccess, setScrapeInlineSuccess] = useState<{ title: string; wordCount: number } | null>(null);
   const [scrapeInlineError, setScrapeInlineError] = useState<string | null>(null);
 
+  // Dictado por voz: IA Soul
+  const [isRecordingSoul, setIsRecordingSoul] = useState(false);
+  const [soulVoiceText, setSoulVoiceText] = useState('');
+  const [processingSoulVoice, setProcessingSoulVoice] = useState(false);
+  const [soulVoiceFeedback, setSoulVoiceFeedback] = useState<string | null>(null);
+  const [soulVoiceError, setSoulVoiceError] = useState<string | null>(null);
+  const soulRecognitionRef = useRef<any>(null);
+
+  // Dictado por voz: Producto Zona 1
+  const [showVoiceProductModal, setShowVoiceProductModal] = useState(false);
+  const [isRecordingProduct, setIsRecordingProduct] = useState(false);
+  const [productVoiceText, setProductVoiceText] = useState('');
+  const [customVoiceTitle, setCustomVoiceTitle] = useState('');
+  const [processingProductVoice, setProcessingProductVoice] = useState(false);
+  const [productVoiceSuccess, setProductVoiceSuccess] = useState<{ title: string; wordCount: number } | null>(null);
+  const [productVoiceError, setProductVoiceError] = useState<string | null>(null);
+  const productRecognitionRef = useRef<any>(null);
+
   // Cerebro global y simulaciones
   const [brainDocs, setBrainDocs] = useState<BrainDoc[]>([]);
   const [simulations, setSimulations] = useState<Simulation[]>([]);
@@ -261,6 +282,15 @@ export default function AgentsFactoryView() {
         setEditRole(data.agent.role || '');
         setBrainDocs(data.brainDocs || []);
         setSimulations(data.simulations || []);
+        if (data.agent.ia_soul) {
+          const soul = data.agent.ia_soul;
+          if (soul.preset) setSoulPreset(soul.preset);
+          if (typeof soul.warmth === 'number') setSoulWarmth(soul.warmth);
+          if (typeof soul.formality === 'number') setSoulFormality(soul.formality);
+          if (typeof soul.closing_style === 'number') setSoulClosingStyle(soul.closing_style);
+          if (typeof soul.technical_level === 'number') setSoulTechnicalLevel(soul.technical_level);
+          if (soul.custom_rules) setSoulCustomRules(soul.custom_rules);
+        }
         if (data.brainDocs?.length > 0 && !selectedBrainSlug) {
           setSelectedBrainSlug(data.brainDocs[0].file_slug);
         }
@@ -641,6 +671,175 @@ export default function AgentsFactoryView() {
     } finally {
       setActionLoading(false);
       setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // Reconocimiento de voz nativo en navegador (es-MX)
+  const startSpeechRecognition = (
+    onAppendText: (chunk: string) => void,
+    onRecordingState: (recording: boolean) => void,
+    onError: (err: string | null) => void
+  ) => {
+    if (typeof window === 'undefined') return null;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      onError('Tu navegador no soporta reconocimiento de voz nativo. Puedes escribir o pegar tus ideas en el cuadro de texto.');
+      return null;
+    }
+    try {
+      const recognition = new SpeechRec();
+      recognition.lang = 'es-MX';
+      recognition.continuous = true;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        onRecordingState(true);
+        onError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) {
+            transcript += event.results[i][0].transcript + ' ';
+          }
+        }
+        if (transcript.trim()) {
+          onAppendText(transcript.trim());
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error !== 'no-speech') {
+          onError('Error de micrófono: ' + event.error);
+        }
+        onRecordingState(false);
+      };
+
+      recognition.onend = () => {
+        onRecordingState(false);
+      };
+
+      recognition.start();
+      return recognition;
+    } catch (err: any) {
+      onError('No se pudo acceder al micrófono: ' + err.message);
+      onRecordingState(false);
+      return null;
+    }
+  };
+
+  const handleToggleSoulRecording = () => {
+    if (isRecordingSoul) {
+      if (soulRecognitionRef.current) {
+        try { soulRecognitionRef.current.stop(); } catch {}
+        soulRecognitionRef.current = null;
+      }
+      setIsRecordingSoul(false);
+    } else {
+      setSoulVoiceError(null);
+      const rec = startSpeechRecognition(
+        (chunk) => setSoulVoiceText((prev) => (prev ? prev + ' ' + chunk : chunk)),
+        setIsRecordingSoul,
+        setSoulVoiceError
+      );
+      soulRecognitionRef.current = rec;
+    }
+  };
+
+  const handleDistillSoul = async () => {
+    if (!selectedAgentId || !soulVoiceText.trim()) return;
+    if (isRecordingSoul) {
+      if (soulRecognitionRef.current) {
+        try { soulRecognitionRef.current.stop(); } catch {}
+        soulRecognitionRef.current = null;
+      }
+      setIsRecordingSoul(false);
+    }
+    setProcessingSoulVoice(true);
+    setSoulVoiceFeedback(null);
+    setSoulVoiceError(null);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/soul/distill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawVoiceText: soulVoiceText.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al procesar dictado de voz');
+
+      if (data.preset) setSoulPreset(data.preset);
+      if (typeof data.warmth === 'number') setSoulWarmth(data.warmth);
+      if (typeof data.formality === 'number') setSoulFormality(data.formality);
+      if (typeof data.closing_style === 'number') setSoulClosingStyle(data.closing_style);
+      if (typeof data.technical_level === 'number') setSoulTechnicalLevel(data.technical_level);
+      if (data.custom_rules) {
+        setSoulCustomRules((prev) => (prev ? prev + '\n\n' + data.custom_rules : data.custom_rules));
+      }
+      setSoulVoiceFeedback(data.summary || 'Personalidad y reglas calibradas automáticamente con IA a partir de tu dictado.');
+      setSuccessMsg('✨ Alma del agente calibrada por IA. Haz clic en "Guardar Personalidad" para confirmar.');
+    } catch (err: any) {
+      setSoulVoiceError(err.message);
+    } finally {
+      setProcessingSoulVoice(false);
+    }
+  };
+
+  const handleToggleProductRecording = () => {
+    if (isRecordingProduct) {
+      if (productRecognitionRef.current) {
+        try { productRecognitionRef.current.stop(); } catch {}
+        productRecognitionRef.current = null;
+      }
+      setIsRecordingProduct(false);
+    } else {
+      setProductVoiceError(null);
+      const rec = startSpeechRecognition(
+        (chunk) => setProductVoiceText((prev) => (prev ? prev + ' ' + chunk : chunk)),
+        setIsRecordingProduct,
+        setProductVoiceError
+      );
+      productRecognitionRef.current = rec;
+    }
+  };
+
+  const handleSaveProductVoiceNote = async () => {
+    if (!selectedAgentId || !selectedProductId || !productVoiceText.trim()) return;
+    if (isRecordingProduct) {
+      if (productRecognitionRef.current) {
+        try { productRecognitionRef.current.stop(); } catch {}
+        productRecognitionRef.current = null;
+      }
+      setIsRecordingProduct(false);
+    }
+    setProcessingProductVoice(true);
+    setProductVoiceSuccess(null);
+    setProductVoiceError(null);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/products/' + selectedProductId + '/voice-note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawVoiceText: productVoiceText.trim(),
+          customTitle: customVoiceTitle.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al estructurar dictado de voz');
+
+      setProductVoiceSuccess({
+        title: data.title || 'Explicación Verbal Estructurada',
+        wordCount: data.wordCount || 0,
+      });
+      setProductVoiceText('');
+      setCustomVoiceTitle('');
+      await fetchProductDetail(selectedAgentId, selectedProductId);
+      await fetchProducts(selectedAgentId);
+      setSuccessMsg('🎙️ Documento de estudio generado y guardado en la memoria del producto.');
+    } catch (err: any) {
+      setProductVoiceError(err.message);
+    } finally {
+      setProcessingProductVoice(false);
     }
   };
 
@@ -1209,12 +1408,14 @@ export default function AgentsFactoryView() {
                                     <div className="flex items-center gap-2 min-w-0 pr-2">
                                       {f.file_type === 'web_url' ? (
                                         <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                      ) : f.file_type === 'voice_note' ? (
+                                        <Mic className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                                       ) : (
                                         <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                                       )}
                                       <span className="truncate font-medium text-slate-700">{f.file_name}</span>
                                       <span className="text-[10px] text-slate-400">
-                                        {f.file_type === 'web_url'
+                                        {f.file_type === 'web_url' || f.file_type === 'voice_note'
                                           ? `(${f.file_size} palabras)`
                                           : `(${(f.file_size / 1024).toFixed(0)} KB)`}
                                       </span>
@@ -1259,10 +1460,10 @@ export default function AgentsFactoryView() {
                               </div>
                             )}
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
                               <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-slate-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
                                 <UploadCloud className="w-4 h-4 text-amber-700" />
-                                <span>Subir Archivos (PDF/Word/MD)</span>
+                                <span>Subir Archivos</span>
                                 <input
                                   type="file"
                                   multiple
@@ -1278,7 +1479,16 @@ export default function AgentsFactoryView() {
                                 className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 text-xs font-semibold transition-all shadow-sm"
                               >
                                 <Globe className="w-4 h-4 text-blue-600" />
-                                <span>{showUrlInput ? 'Cerrar Enlace Web' : '🌐 + Extraer desde URL Web'}</span>
+                                <span>{showUrlInput ? 'Cerrar URL' : '🌐 + URL Web'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowVoiceProductModal(!showVoiceProductModal)}
+                                className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-purple-300 hover:bg-purple-50 text-purple-700 text-xs font-semibold transition-all shadow-sm"
+                              >
+                                <Mic className="w-4 h-4 text-purple-600" />
+                                <span>{showVoiceProductModal ? 'Cerrar Dictado' : '🎙️ + Dictar por Voz'}</span>
                               </button>
                             </div>
 
@@ -1394,6 +1604,128 @@ export default function AgentsFactoryView() {
                                 </p>
                               </div>
                             )}
+                          {showVoiceProductModal && (
+                              <div className="p-4 bg-purple-50/80 rounded-xl border border-purple-200 space-y-3 animate-fade-in">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Mic className="w-4 h-4 text-purple-600" />
+                                    <h4 className="text-xs font-bold text-purple-950">
+                                      Dictado de Conocimiento por Voz (Explicación del Experto / Fundador)
+                                    </h4>
+                                  </div>
+                                  <span className="text-[10px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
+                                    Estructuración con IA
+                                  </span>
+                                </div>
+
+                                <p className="text-[11px] text-purple-900/80">
+                                  Explica libremente el producto, ventajas contra la competencia (ej. por qué comprar aquí y no en otro lado), garantías y especificaciones. La IA limpiará muletillas y creará un documento técnico de estudio.
+                                </p>
+
+                                <div className="space-y-2">
+                                  <input
+                                    type="text"
+                                    value={customVoiceTitle}
+                                    onChange={(e) => setCustomVoiceTitle(e.target.value)}
+                                    placeholder="Título del tema (opcional, ej. Por qué elegirnos a nosotros vs la competencia)"
+                                    className="w-full px-3 py-2 text-xs bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-800 shadow-sm"
+                                    disabled={processingProductVoice}
+                                  />
+
+                                  <div className="relative">
+                                    <textarea
+                                      rows={4}
+                                      value={productVoiceText}
+                                      onChange={(e) => setProductVoiceText(e.target.value)}
+                                      placeholder="Presiona 'Iniciar Grabación' y habla... La transcripción aparecerá aquí en tiempo real para que puedas revisarla antes de estructurar."
+                                      className="w-full px-3 py-2.5 text-xs bg-white border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-800 shadow-sm leading-relaxed"
+                                      disabled={processingProductVoice}
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center justify-between gap-2 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={handleToggleProductRecording}
+                                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                                        isRecordingProduct
+                                          ? 'bg-purple-600 hover:bg-purple-700 text-white ring-2 ring-purple-400 animate-pulse'
+                                          : 'bg-white border border-purple-300 hover:bg-purple-100 text-purple-700'
+                                      }`}
+                                    >
+                                      {isRecordingProduct ? (
+                                        <>
+                                          <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                          <span>Detener Grabación</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Mic className="w-3.5 h-3.5 text-purple-600" />
+                                          <span>Iniciar Grabación</span>
+                                        </>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={handleSaveProductVoiceNote}
+                                      disabled={processingProductVoice || !productVoiceText.trim()}
+                                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 active:scale-95"
+                                    >
+                                      {processingProductVoice ? (
+                                        <>
+                                          <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                                          <span>Estructurando con IA...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Sparkles className="w-3.5 h-3.5" />
+                                          <span>✨ Estructurar Documento de Estudio</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Feedback éxito */}
+                                {productVoiceSuccess && (
+                                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start justify-between gap-2 shadow-sm animate-fade-in">
+                                    <div className="flex items-start gap-2">
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <p className="font-bold">¡Documento de voz estructurado y guardado!</p>
+                                        <p className="text-emerald-700 text-[11px] mt-0.5">
+                                          Se generó el documento <strong>{productVoiceSuccess.title}</strong> ({productVoiceSuccess.wordCount} palabras) y se integró como material de estudio.
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => setProductVoiceSuccess(null)}
+                                      className="text-emerald-700 hover:text-emerald-950 font-bold text-sm px-1.5"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Feedback error */}
+                                {productVoiceError && (
+                                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start justify-between gap-2 shadow-sm animate-fade-in">
+                                    <div className="flex items-start gap-2">
+                                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                      <p className="text-[11px]">{productVoiceError}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => setProductVoiceError(null)}
+                                      className="text-rose-700 hover:text-rose-950 font-bold text-sm px-1.5"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
                           </div>
 
                           {/* 📱 ZONA 2: ARCHIVOS PARA ENVIAR POR WHATSAPP */}
@@ -1623,6 +1955,129 @@ export default function AgentsFactoryView() {
                           Define la calidez, modismos y reglas de trato humano. La IA consultará los datos fríos del catálogo pero responderá con esta personalidad.
                         </p>
                       </div>
+                    </div>
+
+                    {/* 🎙️ Dictado por Voz con Capa de Pulido Cognitivo */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-50/80 via-white to-purple-50/40 border border-rose-200/80 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+                            isRecordingSoul ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-600/30' : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            <Mic className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>🎙️ Dictar Alma por Voz (Capa de Pulido con IA)</span>
+                              <span className="text-[10px] font-semibold text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-full">
+                                es-MX
+                              </span>
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              Habla sobre cómo quieres que venda o responda tu agente. La IA eliminará muletillas, calibrará los sliders y redactará sus reglas de oro.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleToggleSoulRecording}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                            isRecordingSoul
+                              ? 'bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-400 animate-pulse'
+                              : 'bg-white border border-rose-300 hover:bg-rose-50 text-rose-700'
+                          }`}
+                        >
+                          {isRecordingSoul ? (
+                            <>
+                              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                              <span>Detener Grabación</span>
+                            </>
+                          ) : (
+                            <>
+                              <Mic className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Iniciar Dictado</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Textarea para transcribir y editar */}
+                      <div className="space-y-2">
+                        <textarea
+                          rows={3}
+                          value={soulVoiceText}
+                          onChange={(e) => setSoulVoiceText(e.target.value)}
+                          placeholder="Haz clic en 'Iniciar Dictado' y habla libremente: 'Quiero que seas súper amable y empático, pero cuando el cliente pregunte por el precio lo invites primero a una consulta gratuita...'"
+                          className="w-full rounded-xl border border-rose-200 bg-white/90 p-3 text-xs text-slate-800 outline-none focus:border-rose-500 shadow-inner leading-relaxed"
+                        />
+
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            {soulVoiceText.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => setSoulVoiceText('')}
+                                className="text-[11px] text-slate-400 hover:text-slate-600 font-medium"
+                              >
+                                Limpiar dictado
+                              </button>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleDistillSoul}
+                            disabled={processingSoulVoice || !soulVoiceText.trim()}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-700 hover:to-purple-700 text-white text-xs font-bold shadow-sm active:scale-95 disabled:opacity-50"
+                          >
+                            {processingSoulVoice ? (
+                              <>
+                                <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                                <span>Pulir con IA...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-3.5 h-3.5" />
+                                <span>✨ Pulir con IA y Calibrar Sliders</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Feedback / Error */}
+                      {soulVoiceFeedback && (
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start justify-between gap-2 animate-fade-in">
+                          <div className="flex items-start gap-2">
+                            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold">¡Alma y Sliders Calibrados con Éxito!</p>
+                              <p className="text-emerald-700 text-[11px] mt-0.5">{soulVoiceFeedback}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setSoulVoiceFeedback(null)}
+                            className="text-emerald-700 hover:text-emerald-950 font-bold text-sm px-1.5"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+
+                      {soulVoiceError && (
+                        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start justify-between gap-2 animate-fade-in">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <p className="text-[11px]">{soulVoiceError}</p>
+                          </div>
+                          <button
+                            onClick={() => setSoulVoiceError(null)}
+                            className="text-rose-700 hover:text-rose-950 font-bold text-sm px-1.5"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Presets Rápidos */}
