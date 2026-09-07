@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { SecondBrainGraph } from '../components/SecondBrainGraph';
 import {
+  Globe,
   Bot,
   FolderLock,
   FolderHeart,
@@ -91,6 +92,7 @@ export interface KnowledgeFile {
   file_size: number;
   file_url: string;
   cdn_url?: string;
+  storage_url?: string;
   created_at: string;
 }
 
@@ -143,6 +145,9 @@ export default function AgentsFactoryView() {
   const [copiedSheet, setCopiedSheet] = useState(false);
   const [synthesisError, setSynthesisError] = useState<string | null>(null);
   const [synthesisSuccess, setSynthesisSuccess] = useState<string | null>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [scrapeUrlInput, setScrapeUrlInput] = useState('');
+  const [scrapingUrl, setScrapingUrl] = useState(false);
 
   // Cerebro global y simulaciones
   const [brainDocs, setBrainDocs] = useState<BrainDoc[]>([]);
@@ -445,6 +450,37 @@ export default function AgentsFactoryView() {
     navigator.clipboard.writeText(selectedProduct.knowledge_sheet);
     setCopiedSheet(true);
     setTimeout(() => setCopiedSheet(false), 3000);
+  };
+
+  // Extraer información desde URL web
+  const handleScrapeUrl = async () => {
+    if (!selectedAgentId || !selectedProductId || !scrapeUrlInput.trim()) return;
+    setScrapingUrl(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/knowledge/scrape-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: scrapeUrlInput.trim(),
+          productId: selectedProductId,
+          folder: 'material_estudio',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al extraer contenido de la URL');
+
+      setSuccessMsg(`¡Página web procesada con éxito! Se extrajeron ${data.wordCount} palabras de estudio.`);
+      setScrapeUrlInput('');
+      setShowUrlInput(false);
+      await fetchProductDetail(selectedAgentId, selectedProductId);
+      await fetchProducts(selectedAgentId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setScrapingUrl(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
   };
 
   // Sintetizar Ficha de Conocimiento del Producto
@@ -1106,19 +1142,38 @@ export default function AgentsFactoryView() {
                                     className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs"
                                   >
                                     <div className="flex items-center gap-2 min-w-0 pr-2">
-                                      <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      {f.file_type === 'web_url' ? (
+                                        <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                      ) : (
+                                        <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      )}
                                       <span className="truncate font-medium text-slate-700">{f.file_name}</span>
                                       <span className="text-[10px] text-slate-400">
-                                        ({(f.file_size / 1024).toFixed(0)} KB)
+                                        {f.file_type === 'web_url'
+                                          ? `(${f.file_size} palabras)`
+                                          : `(${(f.file_size / 1024).toFixed(0)} KB)`}
                                       </span>
                                     </div>
-                                    <button
-                                      onClick={() => handleDeleteFile(f.id)}
-                                      className="text-slate-400 hover:text-rose-600 p-1"
-                                      title="Eliminar"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                      {f.storage_url && f.storage_url.startsWith('http') && (
+                                        <a
+                                          href={f.storage_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-slate-400 hover:text-indigo-600 p-1"
+                                          title="Abrir página web original"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                        </a>
+                                      )}
+                                      <button
+                                        onClick={() => handleDeleteFile(f.id)}
+                                        className="text-slate-400 hover:text-rose-600 p-1"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
                                   </div>
                                 ))
                               )}
@@ -1139,17 +1194,73 @@ export default function AgentsFactoryView() {
                               </div>
                             )}
 
-                            <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-slate-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
-                              <UploadCloud className="w-4 h-4 text-amber-700" />
-                              <span>Subir Documentos Internos (PDF / Word / Markdown)</span>
-                              <input
-                                type="file"
-                                multiple
-                                className="hidden"
-                                onChange={(e) => handleUploadToProduct('material_estudio', e.target.files)}
-                                disabled={actionLoading}
-                              />
-                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-slate-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
+                                <UploadCloud className="w-4 h-4 text-amber-700" />
+                                <span>Subir Archivos (PDF/Word/MD)</span>
+                                <input
+                                  type="file"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(e) => handleUploadToProduct('material_estudio', e.target.files)}
+                                  disabled={actionLoading}
+                                />
+                              </label>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowUrlInput(!showUrlInput)}
+                                className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 text-xs font-semibold transition-all shadow-sm"
+                              >
+                                <Globe className="w-4 h-4 text-blue-600" />
+                                <span>{showUrlInput ? 'Cerrar Enlace Web' : '🌐 + Extraer desde URL Web'}</span>
+                              </button>
+                            </div>
+
+                            {showUrlInput && (
+                              <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 space-y-2 animate-fade-in">
+                                <label className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                                  <Globe className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Scraping de Página Web o Landing Page</span>
+                                </label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="url"
+                                    value={scrapeUrlInput}
+                                    onChange={(e) => setScrapeUrlInput(e.target.value)}
+                                    placeholder="https://tuempresa.com/producto-o-servicio"
+                                    className="flex-1 px-3 py-2 text-xs bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                                    disabled={scrapingUrl}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleScrapeUrl();
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    onClick={handleScrapeUrl}
+                                    disabled={scrapingUrl || !scrapeUrlInput.trim()}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-xs font-bold rounded-lg transition-all shadow-sm flex items-center gap-1.5 shrink-0 active:scale-95"
+                                  >
+                                    {scrapingUrl ? (
+                                      <>
+                                        <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                                        <span>Extrayendo...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Sparkles className="w-3.5 h-3.5" />
+                                        <span>Extraer y Estudiar</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                                <p className="text-[11px] text-blue-700">
+                                  La IA leerá el texto público de la página y lo guardará como material de estudio para este producto.
+                                </p>
+                              </div>
+                            )}
                           </div>
 
                           {/* 📱 ZONA 2: ARCHIVOS PARA ENVIAR POR WHATSAPP */}
