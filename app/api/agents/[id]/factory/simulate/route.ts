@@ -22,10 +22,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const brainContext = brainDocs.map((b: any) => `### ${b.title}\n${b.markdown_content}`).join('\n\n');
 
-    const { rows: keyRows } = await pool.query(
-      'SELECT gemini_key, anthropic_key, openai_key FROM account_ai_keys WHERE account_id = $1 LIMIT 1;',
-      [agent.account_id || 'default']
-    );
+    const { rows: keyRows } = await pool.query(`
+      SELECT gemini_key, anthropic_key, openai_key FROM account_ai_keys 
+      WHERE account_id = $1 OR account_id = 'OS9czz85LUvBeljk8FEv' OR account_id = 'default'
+      ORDER BY CASE WHEN account_id = $1 THEN 1 WHEN account_id = 'OS9czz85LUvBeljk8FEv' THEN 2 ELSE 3 END 
+      LIMIT 1;
+    `, [agent.account_id || 'OS9czz85LUvBeljk8FEv']);
     const accountKeys = keyRows[0] || {};
 
     const provider = agent.llm_provider || 'google';
@@ -72,25 +74,42 @@ ${brainContext || 'Usa respuestas asertivas, datos técnicos duros y empatía.'}
     let simResults: any = null;
 
     if (provider === 'google') {
-      const modelName = agent.llm_model || 'gemini-2.0-flash';
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${effectiveApiKey}`;
+      const candidateModels = [
+        agent.llm_model && !agent.llm_model.startsWith('gemini-2') ? agent.llm_model : 'gemini-3.5-flash',
+        'gemini-3.5-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+      ];
+      const modelsToTry = Array.from(new Set(candidateModels));
 
-      const response = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: simPrompt }] }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `Error en llamada a Google Gemini (${response.status})`);
+      let lastError = '';
+      for (const mName of modelsToTry) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${effectiveApiKey}`;
+          const response = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: simPrompt }] }],
+              generationConfig: { responseMimeType: 'application/json' },
+            }),
+          });
+          if (response.ok) {
+            const resJson = await response.json();
+            simResults = JSON.parse(resJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+            if (simResults) break;
+          } else {
+            const errData = await response.json().catch(() => ({}));
+            lastError = errData.error?.message || `Error (${response.status}) en ${mName}`;
+          }
+        } catch (mErr: any) {
+          lastError = mErr.message;
+        }
       }
 
-      const resJson = await response.json();
-      simResults = JSON.parse(resJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+      if (!simResults) {
+        throw new Error(lastError || 'Error en simulación con Google Gemini');
+      }
     } else if (provider === 'anthropic' || effectiveApiKey.startsWith('sk-ant-')) {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
