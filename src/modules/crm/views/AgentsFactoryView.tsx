@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { SecondBrainGraph } from '../components/SecondBrainGraph';
 import {
   Globe,
+  Pencil,
   Bot,
   FolderLock,
   FolderHeart,
@@ -148,6 +149,8 @@ export default function AgentsFactoryView() {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [scrapeUrlInput, setScrapeUrlInput] = useState('');
   const [scrapingUrl, setScrapingUrl] = useState(false);
+  const [editingSimId, setEditingSimId] = useState<string | null>(null);
+  const [editingDialogue, setEditingDialogue] = useState<Array<{ sender: 'buyer' | 'agent'; text: string }> | null>(null);
   const [scrapingStatus, setScrapingStatus] = useState<{ stage: string; percent: number } | null>(null);
   const [scrapeInlineSuccess, setScrapeInlineSuccess] = useState<{ title: string; wordCount: number } | null>(null);
   const [scrapeInlineError, setScrapeInlineError] = useState<string | null>(null);
@@ -699,6 +702,46 @@ export default function AgentsFactoryView() {
       await fetchAgents();
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  // Manejadores de Edición de Respuestas en el Gimnasio
+  const handleStartEditSim = (sim: any) => {
+    setEditingSimId(sim.id);
+    const initial = Array.isArray(sim.dialogue) ? sim.dialogue.map((d: any) => ({ ...d })) : [];
+    setEditingDialogue(initial);
+  };
+
+  const handleCancelEditSim = () => {
+    setEditingSimId(null);
+    setEditingDialogue(null);
+  };
+
+  const handleSaveEditedSim = async (simId: string) => {
+    if (!selectedAgentId || !editingDialogue) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/simulations/' + simId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'approved',
+          dialogue: editingDialogue,
+          feedbackNotes: 'Respuesta modelo ajustada y calibrada por el supervisor en el Gimnasio.',
+        }),
+      });
+      if (!res.ok) throw new Error('Error al guardar ajustes');
+
+      setEditingSimId(null);
+      setEditingDialogue(null);
+      setSuccessMsg('⭐ Respuesta modelo guardada con éxito. El agente ha memorizado esta corrección para futuros prospectos.');
+      await fetchAgentDetails(selectedAgentId);
+      await fetchAgents();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => setSuccessMsg(null), 5000);
     }
   };
 
@@ -1870,30 +1913,107 @@ export default function AgentsFactoryView() {
                               </span>
                             </div>
 
-                            <div className="space-y-3 bg-slate-50 p-4 rounded-xl max-h-80 overflow-y-auto">
-                              {sim.dialogue?.map((msg, i) => (
-                                <div key={i} className={`flex flex-col ${msg.sender === 'agent' ? 'items-end' : 'items-start'}`}>
-                                  <span className="text-[10px] font-bold text-slate-400 mb-1">
-                                    {msg.sender === 'agent' ? `🤖 ${selectedAgent.name}` : '👤 Comprador Escéptico'}
-                                  </span>
-                                  <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-xs ${msg.sender === 'agent' ? 'bg-indigo-600 text-white' : 'bg-white border text-slate-800'}`}>
-                                    {msg.text}
+                            <div className="space-y-3 bg-slate-50 p-4 rounded-xl max-h-96 overflow-y-auto">
+                              {sim.dialogue?.map((msg, i) => {
+                                const isEditingThis = editingSimId === sim.id;
+                                const isAgent = msg.sender === 'agent';
+
+                                return (
+                                  <div key={i} className={`flex flex-col ${isAgent ? 'items-end' : 'items-start'}`}>
+                                    <span className="text-[10px] font-bold text-slate-400 mb-1">
+                                      {isAgent ? `🤖 ${selectedAgent.name}` : '👤 Comprador Escéptico'}
+                                    </span>
+                                    
+                                    {isEditingThis && isAgent ? (
+                                      <div className="w-full bg-indigo-50/80 border border-indigo-200 rounded-2xl p-3 space-y-1.5 my-1 shadow-sm">
+                                        <div className="flex items-center justify-between text-[11px] font-bold text-indigo-900">
+                                          <span className="flex items-center gap-1">
+                                            <Pencil className="w-3 h-3 text-indigo-600" />
+                                            Ajustar lo que dice {selectedAgent.name}:
+                                          </span>
+                                          <span className="text-[10px] text-indigo-600 font-normal">Edita el texto a tu gusto</span>
+                                        </div>
+                                        <textarea
+                                          value={editingDialogue?.[i]?.text ?? msg.text}
+                                          onChange={(e) => {
+                                            if (!editingDialogue) return;
+                                            const updated = [...editingDialogue];
+                                            updated[i] = { ...updated[i], text: e.target.value };
+                                            setEditingDialogue(updated);
+                                          }}
+                                          rows={3}
+                                          className="w-full text-xs p-2.5 bg-white border border-indigo-300 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-sans leading-relaxed resize-y shadow-inner"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${isAgent ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-800'}`}>
+                                        {msg.text}
+                                      </div>
+                                    )}
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
 
-                            {sim.status !== 'approved' && (
-                              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                                <button
-                                  onClick={() => handleReviewSimulation(sim.id, 'approved')}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
-                                >
-                                  <ThumbsUp className="w-3.5 h-3.5" />
-                                  <span>Aprobar</span>
-                                </button>
+                            {/* Barra de Acciones del Combate */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                              <div>
+                                {sim.status === 'approved' ? (
+                                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 inline-flex items-center gap-1">
+                                    ⭐ Caso modelo memorizado en el Segundo Cerebro
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-slate-500">
+                                    Ajusta la respuesta para entrenar a tu agente o apruébalo directamente.
+                                  </span>
+                                )}
                               </div>
-                            )}
+
+                              <div className="flex items-center gap-2 self-end sm:self-auto">
+                                {editingSimId === sim.id ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditSim}
+                                      disabled={actionLoading}
+                                      className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all"
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEditedSim(sim.id)}
+                                      disabled={actionLoading}
+                                      className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                                    >
+                                      <Check className="w-3.5 h-3.5 text-emerald-300" />
+                                      <span>Guardar Ajustes y Aprobar</span>
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditSim(sim)}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all shadow-sm active:scale-95"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span>{sim.status === 'approved' ? 'Modificar Respuesta' : 'Ajustar Respuesta'}</span>
+                                    </button>
+                                    {sim.status !== 'approved' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReviewSimulation(sim.id, 'approved')}
+                                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all active:scale-95"
+                                      >
+                                        <ThumbsUp className="w-3.5 h-3.5" />
+                                        <span>Aprobar</span>
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
