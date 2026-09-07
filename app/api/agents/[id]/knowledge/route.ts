@@ -21,12 +21,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const folder = searchParams.get('folder');
+    const productId = searchParams.get('product_id');
 
     let query = 'SELECT * FROM ai_agent_knowledge WHERE agent_id = $1';
     const values: any[] = [id];
+    let pIdx = 2;
     if (folder) {
-      query += ' AND folder = $2';
+      query += ` AND folder = $${pIdx++}`;
       values.push(folder);
+    }
+    if (productId) {
+      query += ` AND product_id = $${pIdx++}`;
+      values.push(productId);
     }
     query += ' ORDER BY created_at DESC;';
 
@@ -52,6 +58,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       contentText = '',
       triggerRule = '',
       suggestedCaption = '',
+      productId = null,
     } = body;
 
     if (!fileName) {
@@ -102,8 +109,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const insertSql = `
       INSERT INTO ai_agent_knowledge (
         agent_id, folder, file_name, file_type, file_size, storage_url, cdn_url,
-        content_text, trigger_rule, suggested_caption, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'processed')
+        content_text, trigger_rule, suggested_caption, product_id, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'processed')
       RETURNING *;
     `;
 
@@ -118,6 +125,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       contentText || '',
       triggerRule || null,
       suggestedCaption || null,
+      productId || null,
     ]);
 
     return NextResponse.json({ file: rows[0] }, { status: 201 });

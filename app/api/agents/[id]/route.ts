@@ -98,6 +98,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (targetChannel !== undefined) { updates.push(`target_channel = $${paramIndex++}`); values.push(targetChannel); }
     if (llmProvider !== undefined) { updates.push(`llm_provider = $${paramIndex++}`); values.push(llmProvider); }
     if (llmModel !== undefined) { updates.push(`llm_model = $${paramIndex++}`); values.push(llmModel); }
+    if (body.ia_soul !== undefined || body.iaSoul !== undefined) {
+      updates.push(`ia_soul = $${paramIndex++}`);
+      values.push(JSON.stringify(body.ia_soul || body.iaSoul));
+    }
     if (apiKey !== undefined) {
       const encKey = apiKey && apiKey.trim() ? Buffer.from(apiKey.trim()).toString('base64') : null;
       updates.push(`encrypted_api_key = $${paramIndex++}`);

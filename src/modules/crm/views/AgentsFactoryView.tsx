@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { SecondBrainGraph } from '../components/SecondBrainGraph';
 import {
   Bot,
   FolderLock,
@@ -24,9 +25,14 @@ import {
   Sliders,
   Copy,
   Plus,
-  Settings as SettingsIcon,
+  Settings as SettingsIcon, Heart, Network,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Package,
+  Layers,
+  Sparkles,
+  ArrowLeft,
+  Check
 } from 'lucide-react';
 
 export interface ModelOption {
@@ -60,15 +66,31 @@ export interface AgentData {
   };
 }
 
+export interface ProductData {
+  id: string;
+  agent_id: string;
+  name: string;
+  slug: string;
+  short_description: string;
+  target_triggers: string;
+  price_range: string;
+  knowledge_sheet?: string;
+  study_files_count?: number;
+  shareable_files_count?: number;
+  has_knowledge_sheet?: boolean;
+  created_at?: string;
+}
+
 export interface KnowledgeFile {
   id: string;
   agent_id: string;
+  product_id?: string | null;
   folder: 'material_estudio' | 'material_compartible';
   file_name: string;
   file_type: string;
   file_size: number;
   file_url: string;
-  ghl_media_url?: string;
+  cdn_url?: string;
   created_at: string;
 }
 
@@ -103,8 +125,15 @@ export default function AgentsFactoryView() {
   const [agents, setAgents] = useState<AgentData[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentData | null>(null);
-  const [studyFiles, setStudyFiles] = useState<KnowledgeFile[]>([]);
-  const [shareableFiles, setShareableFiles] = useState<KnowledgeFile[]>([]);
+  
+  // Productos del Agente
+  const [products, setProducts] = useState<ProductData[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<ProductData | null>(null);
+  const [productStudyFiles, setProductStudyFiles] = useState<KnowledgeFile[]>([]);
+  const [productShareableFiles, setProductShareableFiles] = useState<KnowledgeFile[]>([]);
+
+  // Cerebro global y simulaciones
   const [brainDocs, setBrainDocs] = useState<BrainDoc[]>([]);
   const [simulations, setSimulations] = useState<Simulation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,37 +141,51 @@ export default function AgentsFactoryView() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Catálogo de modelos disponibles dinámicos
+  // Catálogo de modelos
   const [modelCatalog, setModelCatalog] = useState<Record<'google' | 'anthropic' | 'openai', ModelOption[]>>({
     google: [],
     anthropic: [],
     openai: [],
   });
 
-  // Tabs del Taller
-  const [activeTab, setActiveTab] = useState<'materiales' | 'cerebro' | 'gimnasio' | 'ajustes'>('materiales');
+  // Tabs de Navegación
+  const [activeTab, setActiveTab] = useState<'productos' | 'grafo' | 'soul' | 'cerebro' | 'gimnasio' | 'ajustes'>('productos');
   const [selectedBrainSlug, setSelectedBrainSlug] = useState<string | null>(null);
 
-  // Modal de Crear Agente
-  const [createModalOpen, setCreateModalOpen] = useState(false);
+  // Modal Crear Agente
+  const [createAgentModal, setCreateAgentModal] = useState(false);
   const [createStep, setCreateStep] = useState<number>(1);
   const [newAgentName, setNewAgentName] = useState('');
   const [newAgentMission, setNewAgentMission] = useState<'ventas_setter' | 'ventas_closer' | 'servicio_soporte'>('ventas_setter');
   const [newAgentRole, setNewAgentRole] = useState('Setter Comercial WhatsApp');
   const [newAgentProvider, setNewAgentProvider] = useState<'google' | 'anthropic' | 'openai'>('google');
   const [newAgentModel, setNewAgentModel] = useState('gemini-2.0-flash');
-  const [newAgentApiKey, setNewAgentApiKey] = useState('');
 
-  // Ajustes del agente seleccionado
+  // Modal Crear Producto
+  const [createProductModal, setCreateProductModal] = useState(false);
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdDesc, setNewProdDesc] = useState('');
+  const [newProdTriggers, setNewProdTriggers] = useState('');
+  const [newProdPrice, setNewProdPrice] = useState('');
+
+  // Personalidad y Tono (ia-soul)
+  const [soulPreset, setSoulPreset] = useState<'calido_humano' | 'vendedor_consultivo' | 'tecnico_experto' | 'paciencia_soporte'>('calido_humano');
+  const [soulWarmth, setSoulWarmth] = useState(9);
+  const [soulFormality, setSoulFormality] = useState(4);
+  const [soulClosingStyle, setSoulClosingStyle] = useState(6);
+  const [soulTechnicalLevel, setSoulTechnicalLevel] = useState(5);
+  const [soulCustomRules, setSoulCustomRules] = useState('');
+
+  // Ajustes del agente
   const [editProvider, setEditProvider] = useState<'google' | 'anthropic' | 'openai'>('google');
   const [editModel, setEditModel] = useState('');
-  const [editApiKey, setEditApiKey] = useState('');
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
 
-  // Proceso de síntesis
-  const [synthesizing, setSynthesizing] = useState(false);
+  // Estados de síntesis
+  const [synthesizingGlobal, setSynthesizingGlobal] = useState(false);
   const [synthesisStep, setSynthesisStep] = useState(0);
+  const [synthesizingProduct, setSynthesizingProduct] = useState(false);
 
   // Gimnasio
   const [simulating, setSimulating] = useState(false);
@@ -150,24 +193,17 @@ export default function AgentsFactoryView() {
   const [feedbackSimId, setFeedbackSimId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState('');
 
-  // Cargar catálogo de modelos disponibles
-  const fetchModels = async () => {
-    try {
-      const res = await fetch('/api/agents/models');
-      const data = await res.json();
-      if (data.catalog) {
-        setModelCatalog(data.catalog);
-      }
-    } catch (err: any) {
-      console.warn('No se pudo cargar el catálogo dinámico:', err.message);
-    }
-  };
-
+  // 1. Cargar catálogo de modelos
   useEffect(() => {
-    fetchModels();
+    fetch('/api/agents/models')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.catalog) setModelCatalog(data.catalog);
+      })
+      .catch((err) => console.warn('Modelos:', err.message));
   }, []);
 
-  // Cargar lista de agentes
+  // 2. Cargar agentes
   const fetchAgents = async () => {
     try {
       setLoading(true);
@@ -190,7 +226,7 @@ export default function AgentsFactoryView() {
     fetchAgents();
   }, []);
 
-  // Cargar detalles del agente seleccionado
+  // 3. Cargar detalles del agente seleccionado
   const fetchAgentDetails = async (agentId: string) => {
     try {
       const res = await fetch('/api/agents/' + agentId);
@@ -201,14 +237,14 @@ export default function AgentsFactoryView() {
         setEditModel(data.agent.llm_model || 'gemini-2.0-flash');
         setEditName(data.agent.name || '');
         setEditRole(data.agent.role || '');
-        setStudyFiles(data.studyFiles || []);
-        setShareableFiles(data.shareableFiles || []);
         setBrainDocs(data.brainDocs || []);
         setSimulations(data.simulations || []);
-        if (data.brainDocs && data.brainDocs.length > 0 && !selectedBrainSlug) {
+        if (data.brainDocs?.length > 0 && !selectedBrainSlug) {
           setSelectedBrainSlug(data.brainDocs[0].file_slug);
         }
       }
+      // Cargar productos del agente
+      await fetchProducts(agentId);
     } catch (err: any) {
       setError('Error al cargar detalles: ' + err.message);
     }
@@ -216,44 +252,81 @@ export default function AgentsFactoryView() {
 
   useEffect(() => {
     if (selectedAgentId) {
+      setSelectedProductId(null);
+      setSelectedProduct(null);
       fetchAgentDetails(selectedAgentId);
     }
   }, [selectedAgentId]);
 
-  // Actualizar modelo predeterminado al cambiar de proveedor en creación
-  useEffect(() => {
-    if (newAgentProvider === 'google') {
-      setNewAgentModel('gemini-2.0-flash');
-    } else if (newAgentProvider === 'anthropic') {
-      setNewAgentModel('claude-3-5-sonnet-20241022');
-    } else {
-      setNewAgentModel('gpt-4o');
-    }
-  }, [newAgentProvider]);
-
-  // Subir archivo a conocimiento (Material de Estudio o Maletín)
-  const handleUpload = async (folder: 'material_estudio' | 'material_compartible', files: FileList | null) => {
-    if (!files || files.length === 0 || !selectedAgentId) return;
-    setActionLoading(true);
-    setError(null);
+  // 4. Cargar productos
+  const fetchProducts = async (agentId: string) => {
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('folder', folder);
-
-        const res = await fetch('/api/agents/' + selectedAgentId + '/knowledge', {
-          method: 'POST',
-          body: formData,
-        });
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'Fallo al subir archivo');
-        }
+      const res = await fetch('/api/agents/' + agentId + '/products');
+      const data = await res.json();
+      if (data.products) {
+        setProducts(data.products);
       }
-      setSuccessMsg('Archivos agregados al agente correctamente.');
-      await fetchAgentDetails(selectedAgentId);
+    } catch (err: any) {
+      console.error('Error al cargar productos:', err.message);
+    }
+  };
+
+  // 5. Cargar detalle de un producto específico
+  const fetchProductDetail = async (agentId: string, prodId: string) => {
+    try {
+      setActionLoading(true);
+      const res = await fetch('/api/agents/' + agentId + '/products/' + prodId);
+      const data = await res.json();
+      if (data.product) {
+        setSelectedProduct(data.product);
+        setProductStudyFiles(data.studyFiles || []);
+        setProductShareableFiles(data.shareableFiles || []);
+      }
+    } catch (err: any) {
+      setError('Error al abrir producto: ' + err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenProduct = (prod: ProductData) => {
+    setSelectedProductId(prod.id);
+    if (selectedAgentId) {
+      fetchProductDetail(selectedAgentId, prod.id);
+    }
+  };
+
+  // Crear producto
+  const handleCreateProduct = async () => {
+    if (!newProdName.trim() || !selectedAgentId) {
+      alert('Ingresa el nombre del producto o servicio.');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newProdName.trim(),
+          short_description: newProdDesc.trim(),
+          target_triggers: newProdTriggers.trim(),
+          price_range: newProdPrice.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al crear producto');
+
+      setCreateProductModal(false);
+      setNewProdName('');
+      setNewProdDesc('');
+      setNewProdTriggers('');
+      setNewProdPrice('');
+      setSuccessMsg('Producto agregado al catálogo correctamente.');
+      await fetchProducts(selectedAgentId);
+      if (data.product) {
+        handleOpenProduct(data.product);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -262,29 +335,120 @@ export default function AgentsFactoryView() {
     }
   };
 
-  // Eliminar archivo
-  const handleDeleteFile = async (fileId: string) => {
-    if (!selectedAgentId || !confirm('¿Deseas eliminar este archivo?')) return;
+  // Subir archivo a un producto
+  const handleUploadToProduct = async (
+    folder: 'material_estudio' | 'material_compartible',
+    files: FileList | null
+  ) => {
+    if (!files || files.length === 0 || !selectedAgentId || !selectedProductId) return;
+    setActionLoading(true);
+    setError(null);
     try {
-      const res = await fetch('/api/agents/' + selectedAgentId + '/knowledge?fileId=' + fileId, {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const reader = new FileReader();
+
+        await new Promise<void>((resolve, reject) => {
+          reader.onload = async () => {
+            try {
+              const fileBase64 = reader.result as string;
+              const res = await fetch('/api/agents/' + selectedAgentId + '/knowledge', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  folder,
+                  fileName: file.name,
+                  fileType: file.type.includes('image') ? 'image' : file.type.includes('video') ? 'video' : 'document',
+                  fileSize: file.size,
+                  fileBase64,
+                  productId: selectedProductId,
+                }),
+              });
+              if (!res.ok) throw new Error('Fallo al subir archivo');
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          };
+          reader.onerror = () => reject(new Error('Error al leer archivo'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      setSuccessMsg('Archivo guardado correctamente en el producto.');
+      await fetchProductDetail(selectedAgentId, selectedProductId);
+      await fetchProducts(selectedAgentId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // Sintetizar Ficha de Conocimiento del Producto
+  const handleSynthesizeProductSheet = async () => {
+    if (!selectedAgentId || !selectedProductId) return;
+    setSynthesizingProduct(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/products/' + selectedProductId + '/digest', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al sintetizar ficha');
+
+      setSuccessMsg('Ficha de Conocimiento sintetizada y estructurada para la IA.');
+      await fetchProductDetail(selectedAgentId, selectedProductId);
+      await fetchProducts(selectedAgentId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSynthesizingProduct(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // Eliminar producto
+  const handleDeleteProduct = async (prodId: string) => {
+    if (!selectedAgentId || !confirm('¿Deseas eliminar este producto y todos sus archivos?')) return;
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/products/' + prodId, {
         method: 'DELETE',
       });
       if (res.ok) {
-        await fetchAgentDetails(selectedAgentId);
+        setSelectedProductId(null);
+        setSelectedProduct(null);
+        await fetchProducts(selectedAgentId);
       }
     } catch (err: any) {
       setError(err.message);
     }
   };
 
-  // Crear nuevo agente
+  // Eliminar archivo
+  const handleDeleteFile = async (fileId: string) => {
+    if (!selectedAgentId || !confirm('¿Eliminar este archivo?')) return;
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/knowledge?fileId=' + fileId, {
+        method: 'DELETE',
+      });
+      if (res.ok && selectedProductId) {
+        await fetchProductDetail(selectedAgentId, selectedProductId);
+        await fetchProducts(selectedAgentId);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // Crear Agente
   const handleCreateAgent = async () => {
     if (!newAgentName.trim()) {
-      setError('Por favor indica un nombre para el agente.');
+      alert('Ingresa el nombre del agente.');
       return;
     }
     setActionLoading(true);
-    setError(null);
     try {
       const res = await fetch('/api/agents', {
         method: 'POST',
@@ -295,20 +459,18 @@ export default function AgentsFactoryView() {
           missionType: newAgentMission,
           llmProvider: newAgentProvider,
           llmModel: newAgentModel,
-          apiKey: newAgentApiKey.trim() || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al crear agente');
 
-      setCreateModalOpen(false);
+      setCreateAgentModal(false);
       setNewAgentName('');
-      setNewAgentApiKey('');
       setCreateStep(1);
       await fetchAgents();
       if (data.agent?.id) {
         setSelectedAgentId(data.agent.id);
-        setActiveTab('materiales');
+        setActiveTab('productos');
       }
     } catch (err: any) {
       setError(err.message);
@@ -317,8 +479,8 @@ export default function AgentsFactoryView() {
     }
   };
 
-  // Actualización rápida de modelo deprecado (1 clic)
-  const handleQuickUpgradeModel = async (recommendedModel: string) => {
+  // Guardar ajustes
+  const handleSaveSettings = async () => {
     if (!selectedAgentId) return;
     setActionLoading(true);
     try {
@@ -326,11 +488,22 @@ export default function AgentsFactoryView() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          llmModel: recommendedModel,
+          name: editName.trim(),
+          role: editRole.trim(),
+          ia_soul: {
+            preset: soulPreset,
+            warmth: soulWarmth,
+            formality: soulFormality,
+            closing_style: soulClosingStyle,
+            technical_level: soulTechnicalLevel,
+            custom_rules: soulCustomRules.trim(),
+          },
+          llmProvider: editProvider,
+          llmModel: editModel,
         }),
       });
       if (res.ok) {
-        setSuccessMsg('Modelo actualizado exitosamente a: ' + recommendedModel);
+        setSuccessMsg('Ajustes guardados con éxito.');
         await fetchAgentDetails(selectedAgentId);
         await fetchAgents();
       }
@@ -342,100 +515,42 @@ export default function AgentsFactoryView() {
     }
   };
 
-  // Guardar cambios en ajustes del agente
-  const handleSaveSettings = async () => {
+  // Encender Fábrica Global
+  const handleSynthesizeGlobalBrain = async () => {
     if (!selectedAgentId) return;
-    setActionLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/agents/' + selectedAgentId, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editName.trim(),
-          role: editRole.trim(),
-          llmProvider: editProvider,
-          llmModel: editModel,
-          apiKey: editApiKey.trim() || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al guardar ajustes');
-
-      setEditApiKey('');
-      setSuccessMsg('Ajustes del agente actualizados con éxito.');
-      await fetchAgentDetails(selectedAgentId);
-      await fetchAgents();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setActionLoading(false);
-      setTimeout(() => setSuccessMsg(null), 4000);
-    }
-  };
-
-  // Eliminar agente
-  const handleDeleteAgent = async (agentId: string) => {
-    if (!confirm('¿Seguro que deseas eliminar este agente y todo su Segundo Cerebro? Esta acción no se puede deshacer.')) return;
-    try {
-      const res = await fetch('/api/agents/' + agentId, { method: 'DELETE' });
-      if (res.ok) {
-        setSelectedAgentId(null);
-        setSelectedAgent(null);
-        await fetchAgents();
-      }
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  // Encender la Fábrica: Digestión y Síntesis del Segundo Cerebro
-  const handleSynthesizeBrain = async () => {
-    if (!selectedAgentId) return;
-    setSynthesizing(true);
+    setSynthesizingGlobal(true);
     setSynthesisStep(1);
-    setError(null);
-
-    const interval = setInterval(() => {
-      setSynthesisStep((prev) => (prev < 6 ? prev + 1 : prev));
-    }, 1400);
+    const interval = setInterval(() => setSynthesisStep((p) => (p < 6 ? p + 1 : p)), 1400);
 
     try {
-      const res = await fetch('/api/agents/' + selectedAgentId + '/factory/digest', {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error durante la digestión');
-
+      const res = await fetch('/api/agents/' + selectedAgentId + '/factory/digest', { method: 'POST' });
+      if (!res.ok) throw new Error('Error al sintetizar cerebro global');
       setSynthesisStep(7);
-      setSuccessMsg('Segundo Cerebro sintetizado con éxito. 7 documentos estratégicos listos.');
+      setSuccessMsg('Segundo Cerebro Global sintetizado con éxito.');
       await fetchAgentDetails(selectedAgentId);
       setActiveTab('cerebro');
     } catch (err: any) {
       setError(err.message);
     } finally {
       clearInterval(interval);
-      setSynthesizing(false);
-      setTimeout(() => setSuccessMsg(null), 5000);
+      setSynthesizingGlobal(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
     }
   };
 
-  // Gimnasio: Ejecutar Simulación con Comprador Escéptico
+  // Simulación
   const handleRunSimulation = async () => {
     if (!selectedAgentId) return;
     setSimulating(true);
-    setError(null);
     try {
       const res = await fetch('/api/agents/' + selectedAgentId + '/factory/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario: customScenario.trim() || undefined }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al ejecutar simulación');
-
+      if (!res.ok) throw new Error('Fallo al simular combate');
       setCustomScenario('');
-      setSuccessMsg('Nuevo combate de entrenamiento completado. Revisa la respuesta.');
+      setSuccessMsg('Combate simulado completado.');
       await fetchAgentDetails(selectedAgentId);
     } catch (err: any) {
       setError(err.message);
@@ -445,21 +560,17 @@ export default function AgentsFactoryView() {
     }
   };
 
-  // Gimnasio: Aprobar o Ajustar Simulación (1 Click)
-  const handleReviewSimulation = async (simId: string, status: 'approved' | 'needs_adjustment', feedbackNotes?: string) => {
+  const handleReviewSimulation = async (simId: string, status: 'approved' | 'needs_adjustment', notes?: string) => {
     if (!selectedAgentId) return;
     try {
-      const res = await fetch('/api/agents/' + selectedAgentId + '/simulations/' + simId, {
+      await fetch('/api/agents/' + selectedAgentId + '/simulations/' + simId, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, feedbackNotes }),
+        body: JSON.stringify({ status, feedbackNotes: notes }),
       });
-      if (res.ok) {
-        setFeedbackSimId(null);
-        setFeedbackText('');
-        await fetchAgentDetails(selectedAgentId);
-        await fetchAgents();
-      }
+      setFeedbackSimId(null);
+      await fetchAgentDetails(selectedAgentId);
+      await fetchAgents();
     } catch (err: any) {
       setError(err.message);
     }
@@ -480,35 +591,33 @@ export default function AgentsFactoryView() {
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 Fábrica de Agentes de IA
                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Segundo Cerebro v2.1
+                  Multiproducto v3.0
                 </span>
               </h1>
               <p className="text-sm text-slate-500 mt-0.5">
-                Setters y Closers con Google Gemini, Claude 3.5, GPT-4o, Psicología Avanzada y Maletín de WhatsApp.
+                Setters y Closers con Catálogo Multiproducto, Google Gemini, Claude 3.5 y Maletín de WhatsApp.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setCreateModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-all shadow-md shadow-indigo-600/20 active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Crear Nuevo Agente</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setCreateAgentModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-all shadow-md shadow-indigo-600/20 active:scale-95 shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Crear Nuevo Agente</span>
+        </button>
       </div>
 
-      {/* Alertas globales */}
+      {/* Alertas */}
       {error && (
         <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{error}</span>
           </div>
-          <button onClick={() => setError(null)} className="text-xs font-semibold hover:underline">
+          <button onClick={() => setError(null)} className="text-xs font-bold hover:underline">
             Cerrar
           </button>
         </div>
@@ -520,9 +629,9 @@ export default function AgentsFactoryView() {
         </div>
       )}
 
-      {/* Contenido Principal */}
+      {/* Grid Principal */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Columna Izquierda: Lista de Agentes & Leaderboard */}
+        {/* Columna Izquierda: Mis Agentes */}
         <div className="lg:col-span-4 space-y-4">
           <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3 px-1">
@@ -541,7 +650,7 @@ export default function AgentsFactoryView() {
                 <Bot className="w-8 h-8 mx-auto text-slate-300" />
                 <p>No tienes agentes creados todavía.</p>
                 <button
-                  onClick={() => setCreateModalOpen(true)}
+                  onClick={() => setCreateAgentModal(true)}
                   className="text-xs text-indigo-600 font-semibold hover:underline"
                 >
                   Crea tu primer Setter en 1 minuto
@@ -598,37 +707,13 @@ export default function AgentsFactoryView() {
                                 : 'bg-slate-100 text-slate-600 border border-slate-200'
                             }`}
                           >
-                            {ag.status === 'active'
-                              ? '🟢 Activo'
-                              : ag.status === 'training'
-                              ? '⚙️ Entrenando'
-                              : '🟡 Borrador'}
+                            {ag.status === 'active' ? '🟢 Activo' : ag.status === 'training' ? '⚙️ Entrenando' : '🟡 Borrador'}
                           </span>
                           <span className="text-[10px] font-medium text-slate-500 flex items-center gap-1">
                             <Zap className="w-2.5 h-2.5 text-amber-500" />
-                            {ag.llm_provider === 'google'
-                              ? 'Gemini'
-                              : ag.llm_provider === 'anthropic'
-                              ? 'Claude'
-                              : 'GPT-4o'}
+                            {ag.llm_provider === 'google' ? 'Gemini' : ag.llm_provider === 'anthropic' ? 'Claude' : 'GPT-4o'}
                           </span>
                         </div>
-                      </div>
-
-                      <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-                        <span className="truncate max-w-[140px]" title={ag.llm_model}>
-                          🤖 {ag.llm_model.replace('claude-3-5-', '').replace('20241022', '')}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteAgent(ag.id);
-                          }}
-                          className="hover:text-rose-600 transition-colors p-1"
-                          title="Eliminar agente"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
                   );
@@ -636,67 +721,17 @@ export default function AgentsFactoryView() {
               </div>
             )}
           </div>
-
-          {/* Banner Resumen del Cóctel Psicológico */}
-          <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl p-4 text-white shadow-md">
-            <div className="flex items-center gap-2 mb-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
-              <Award className="w-4 h-4" />
-              <span>Cóctel Psicológico Maestro</span>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Cada agente es sintetizado con:
-              <br />
-              • <strong>Donald Miller</strong> (StoryBrand: cliente héroe).
-              <br />
-              • <strong>Chris Voss</strong> (Espejeo y preguntas calibradas).
-              <br />
-              • <strong>Robert Cialdini</strong> (Autoridad y micro-compromisos).
-              <br />
-              • <strong>Alex Hormozi</strong> (Mecanismo único de valor).
-              <br />
-              • <strong>Fórmula Híbrida</strong> (Emoción + Mecanismo Técnico + WhatsApp).
-            </p>
-          </div>
         </div>
 
-        {/* Columna Derecha: Taller del Agente Seleccionado */}
+        {/* Columna Derecha: Taller del Agente */}
         <div className="lg:col-span-8">
           {selectedAgent ? (
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col">
-              {/* ALERTA PREVENTIVA DE MODELO DEPRECADO */}
-              {selectedAgent.modelWarning?.isDeprecated && (
-                <div className="bg-amber-500/15 border-b border-amber-300 px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950">
-                  <div className="flex items-start gap-2.5">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-xs font-bold text-amber-900">
-                        Modelo en uso deprecado o superado ({selectedAgent.llm_model})
-                      </h4>
-                      <p className="text-xs text-amber-800/90 mt-0.5">
-                        {selectedAgent.modelWarning.reason}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleQuickUpgradeModel(selectedAgent.modelWarning!.recommendedModel)}
-                    disabled={actionLoading}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95 shrink-0"
-                  >
-                    <span>Actualizar a {selectedAgent.modelWarning.recommendedModel}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
               {/* Barra Superior del Agente */}
               <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-indigo-600/20">
-                    {selectedAgent.mission_type === 'ventas_closer'
-                      ? '💰'
-                      : selectedAgent.mission_type === 'ventas_setter'
-                      ? '🎯'
-                      : '🛡️'}
+                    {selectedAgent.mission_type === 'ventas_closer' ? '💰' : selectedAgent.mission_type === 'ventas_setter' ? '🎯' : '🛡️'}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -708,83 +743,73 @@ export default function AgentsFactoryView() {
                     <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
                       <span className="text-indigo-600 font-semibold flex items-center gap-1">
                         <Zap className="w-3 h-3" />
-                        {selectedAgent.llm_provider === 'google'
-                          ? 'Google Gemini (' + selectedAgent.llm_model + ')'
-                          : selectedAgent.llm_provider === 'anthropic'
-                          ? 'Anthropic Claude (' + selectedAgent.llm_model + ')'
-                          : 'OpenAI (' + selectedAgent.llm_model + ')'}
+                        {selectedAgent.llm_provider.toUpperCase()}: {selectedAgent.llm_model}
                       </span>
                       <span>•</span>
-                      <span>{selectedAgent.hasApiKey ? '🔑 Llave Propia (BYOK)' : '☁️ Llave Plataforma'}</span>
+                      <span>{products.length} productos / servicios</span>
                     </p>
                   </div>
                 </div>
 
-                {/* Botón Encender la Fábrica */}
                 <button
-                  onClick={handleSynthesizeBrain}
-                  disabled={synthesizing || (studyFiles.length === 0 && shareableFiles.length === 0)}
+                  onClick={handleSynthesizeGlobalBrain}
+                  disabled={synthesizingGlobal || products.length === 0}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm ${
-                    synthesizing
+                    synthesizingGlobal
                       ? 'bg-amber-100 text-amber-900 cursor-wait'
-                      : studyFiles.length === 0 && shareableFiles.length === 0
+                      : products.length === 0
                       ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20 active:scale-95'
                   }`}
-                  title={
-                    studyFiles.length === 0 && shareableFiles.length === 0
-                      ? 'Sube al menos 1 archivo para encender la fábrica'
-                      : 'Sintetizar el Segundo Cerebro del Agente'
-                  }
                 >
-                  <Zap className={`w-4 h-4 ${synthesizing ? 'animate-bounce text-amber-600' : ''}`} />
-                  <span>{synthesizing ? 'Sintetizando Cerebro...' : '⚡ Encender Fábrica'}</span>
+                  <Zap className={`w-4 h-4 ${synthesizingGlobal ? 'animate-bounce text-amber-600' : ''}`} />
+                  <span>{synthesizingGlobal ? 'Sintetizando...' : '⚡ Encender Fábrica'}</span>
                 </button>
               </div>
 
-              {/* Animación de síntesis en progreso */}
-              {synthesizing && (
-                <div className="p-4 bg-indigo-50 border-b border-indigo-100">
-                  <div className="flex items-center justify-between text-xs font-semibold text-indigo-900 mb-2">
-                    <span className="flex items-center gap-2">
-                      <RotateCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-                      Digestión Cognitiva en Proceso: Paso {synthesisStep} de 7
-                    </span>
-                    <span>{Math.round((synthesisStep / 7) * 100)}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-indigo-200/60 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-600 transition-all duration-500 rounded-full"
-                      style={{ width: `${(synthesisStep / 7) * 100}%` }}
-                    />
-                  </div>
-                  <p className="text-[11px] text-indigo-700 mt-2 italic">
-                    {synthesisStep === 1 && '1/7: Definiendo Identidad, Tono y Misión con StoryBrand...'}
-                    {synthesisStep === 2 && '2/7: Extrayendo Oferta Irresistible ($100M Hormozi)...'}
-                    {synthesisStep === 3 && '3/7: Codificando Negociación FBI (Chris Voss) y Cialdini...'}
-                    {synthesisStep === 4 && '4/7: Catalogando Mecanismos Técnicos y Hard Proof...'}
-                    {synthesisStep === 5 && '5/7: Estructurando Matriz de Objeciones Calibradas...'}
-                    {synthesisStep === 6 && '6/7: Indexando Maletín de Archivos Compartibles para WhatsApp...'}
-                    {synthesisStep >= 7 && '7/7: Sellando Reglas de Oro, Ética y Límites de la IA...'}
-                  </p>
-                </div>
-              )}
-
-              {/* Pestañas de Navegación del Taller */}
+              {/* Pestañas de Navegación */}
               <div className="flex border-b border-slate-200 px-6 gap-6 text-sm font-medium">
                 <button
-                  onClick={() => setActiveTab('materiales')}
+                  onClick={() => {
+                    setActiveTab('productos');
+                    setSelectedProductId(null);
+                    setSelectedProduct(null);
+                  }}
                   className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
-                    activeTab === 'materiales'
+                    activeTab === 'productos'
                       ? 'border-indigo-600 text-indigo-600'
                       : 'border-transparent text-slate-500 hover:text-slate-900'
                   }`}
                 >
-                  <FolderHeart className="w-4 h-4" />
-                  <span>Las Dos Carpetas</span>
+                  <Package className="w-4 h-4" />
+                  <span>Productos y Servicios</span>
                   <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600">
-                    {studyFiles.length + shareableFiles.length}
+                    {products.length}
                   </span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('grafo')}
+                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                    activeTab === 'grafo'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <Network className="w-4 h-4" />
+                  <span>Red Neuronal (Grafo)</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('soul')}
+                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                    activeTab === 'soul'
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  <Heart className="w-4 h-4 text-rose-500" />
+                  <span>Personalidad (ia-soul)</span>
                 </button>
 
                 <button
@@ -796,7 +821,7 @@ export default function AgentsFactoryView() {
                   }`}
                 >
                   <FileCode className="w-4 h-4" />
-                  <span>Segundo Cerebro (.md)</span>
+                  <span>Segundo Cerebro Global</span>
                   <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-600 font-semibold">
                     {brainDocs.length}
                   </span>
@@ -812,9 +837,6 @@ export default function AgentsFactoryView() {
                 >
                   <Sliders className="w-4 h-4" />
                   <span>Gimnasio de Role-Playing</span>
-                  <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 font-semibold">
-                    {simulations.length}
-                  </span>
                 </button>
 
                 <button
@@ -826,192 +848,574 @@ export default function AgentsFactoryView() {
                   }`}
                 >
                   <SettingsIcon className="w-4 h-4" />
-                  <span>Ajustes & Modelo LLM</span>
+                  <span>Ajustes</span>
                 </button>
               </div>
 
               {/* Contenido de la Pestaña Activa */}
               <div className="p-6">
-                {/* PESTAÑA 1: LAS DOS CARPETAS */}
-                {activeTab === 'materiales' && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Carpeta A: 01-material-de-estudio */}
-                      <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-5 flex flex-col justify-between hover:border-slate-400 transition-colors">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
-                                <FolderLock className="w-4 h-4" />
-                              </div>
-                              <h3 className="text-sm font-bold text-slate-900">01 - Material de Estudio</h3>
-                            </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 flex items-center gap-1">
-                              <ShieldCheck className="w-3 h-3 text-amber-700" />
-                              100% Confidencial
-                            </span>
+                {/* ══════════════ PESTAÑA: PRODUCTOS Y SERVICIOS ══════════════ */}
+                {activeTab === 'productos' && (
+                  <div>
+                    {/* CASO A: LISTA VERTICAL DE PRODUCTOS (Fluyendo hacia abajo) */}
+                    {!selectedProductId ? (
+                      <div className="space-y-6">
+                        {/* Cabecera de la sección */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                              <Package className="w-4 h-4 text-indigo-600" />
+                              Catálogo de Productos y Servicios
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Cada producto tiene sus propios documentos y su Ficha de Conocimiento para evitar confusiones.
+                            </p>
                           </div>
 
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                            Manuales técnicos, PDFs de ingeniería, precios confidenciales y transcripciones.
-                            <strong className="text-slate-700 font-semibold"> La IA solo estudia esto; NUNCA se envía a clientes.</strong>
-                          </p>
+                          <button
+                            onClick={() => setCreateProductModal(true)}
+                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm shrink-0 active:scale-95"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Agregar Producto o Servicio</span>
+                          </button>
+                        </div>
 
-                          {/* Lista de archivos */}
-                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {studyFiles.length === 0 ? (
-                              <div className="py-6 text-center text-slate-400 text-xs italic">
-                                Sin archivos de estudio aún.
-                              </div>
-                            ) : (
-                              studyFiles.map((f) => (
-                                <div
-                                  key={f.id}
-                                  className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0 pr-2">
-                                    <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                    <span className="truncate font-medium text-slate-700">{f.file_name}</span>
-                                    <span className="text-[10px] text-slate-400">
-                                      ({(f.file_size / 1024).toFixed(0)} KB)
-                                    </span>
+                        {/* Menú General del Catálogo */}
+                        <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200/80 flex items-start gap-3">
+                          <Layers className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                          <div className="text-xs text-indigo-950">
+                            <span className="font-bold block mb-0.5">Menú General del Negocio</span>
+                            Cuando el cliente pregunte <em>&quot;¿Qué productos o servicios manejan?&quot;</em> o <em>&quot;¿En qué me pueden ayudar?&quot;</em>, la IA consultará este catálogo y guiará al prospecto hacia la solución ideal.
+                          </div>
+                        </div>
+
+                        {/* LISTA VERTICAL DE PRODUCTOS HACIA ABAJO */}
+                        {products.length === 0 ? (
+                          <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-slate-200 space-y-3">
+                            <Package className="w-10 h-10 mx-auto text-slate-300" />
+                            <h4 className="text-sm font-bold text-slate-800">No hay productos registrados aún</h4>
+                            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                              Agrega tu primer producto o servicio (ej. Invisalign, Implantes, Dron X o PHIX) para cargar sus archivos.
+                            </p>
+                            <button
+                              onClick={() => setCreateProductModal(true)}
+                              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm"
+                            >
+                              + Agregar Primer Producto
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {products.map((prod, idx) => (
+                              <div
+                                key={prod.id}
+                                className="bg-white rounded-2xl border border-slate-200/90 p-4 hover:border-indigo-400 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                              >
+                                <div className="flex items-start gap-3 min-w-0">
+                                  <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-sm font-bold text-slate-700 shrink-0">
+                                    {idx + 1}
                                   </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="text-sm font-bold text-slate-900 truncate">
+                                        {prod.name}
+                                      </h4>
+                                      {prod.price_range && (
+                                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                          {prod.price_range}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                                      {prod.short_description || 'Sin descripción breve'}
+                                    </p>
+
+                                    {/* Indicadores Oficiales */}
+                                    <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-600">
+                                      <span className="flex items-center gap-1 font-medium">
+                                        <FolderLock className="w-3.5 h-3.5 text-amber-600" />
+                                        {prod.study_files_count || 0} Documentos de Estudio
+                                      </span>
+                                      <span>•</span>
+                                      <span className="flex items-center gap-1 font-medium">
+                                        <FolderHeart className="w-3.5 h-3.5 text-emerald-600" />
+                                        {prod.shareable_files_count || 0} Archivos WhatsApp
+                                      </span>
+                                      <span>•</span>
+                                      <span className="flex items-center gap-1">
+                                        {prod.has_knowledge_sheet ? (
+                                          <span className="text-emerald-700 font-bold flex items-center gap-0.5">
+                                            <Check className="w-3.5 h-3.5" /> Ficha Lista
+                                          </span>
+                                        ) : (
+                                          <span className="text-amber-700 font-medium">
+                                            ⏳ Ficha Pendiente
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                                   <button
-                                    onClick={() => handleDeleteFile(f.id)}
-                                    className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                                    title="Eliminar archivo"
+                                    onClick={() => handleOpenProduct(prod)}
+                                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Ver Producto</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteProduct(prod.id)}
+                                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Eliminar producto"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-4 pt-3 border-t border-slate-200">
-                          <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-slate-300 hover:bg-slate-100/80 text-slate-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
-                            <UploadCloud className="w-4 h-4 text-slate-500" />
-                            <span>Subir Archivos Confidenciales</span>
-                            <input
-                              type="file"
-                              multiple
-                              className="hidden"
-                              onChange={(e) => handleUpload('material_estudio', e.target.files)}
-                              disabled={actionLoading}
-                            />
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Carpeta B: 02-material-compartible (El Maletín) */}
-                      <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/20 p-5 flex flex-col justify-between hover:border-indigo-300 transition-colors">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
-                                <FolderHeart className="w-4 h-4" />
                               </div>
-                              <h3 className="text-sm font-bold text-slate-900">02 - Material Compartible</h3>
-                            </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200 flex items-center gap-1">
-                              📱 El Maletín de WhatsApp
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* CASO B: DETALLE DEL PRODUCTO SELECCIONADO (LAS 3 ZONAS OFICIALES) */
+                      <div className="space-y-6">
+                        {/* Barra superior de retorno */}
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                          <button
+                            onClick={() => {
+                              setSelectedProductId(null);
+                              setSelectedProduct(null);
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-indigo-600 transition-colors"
+                          >
+                            <ArrowLeft className="w-4 h-4" />
+                            <span>← Volver al Catálogo de Productos</span>
+                          </button>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-900 bg-slate-100 px-3 py-1 rounded-xl">
+                              {selectedProduct?.name}
                             </span>
                           </div>
+                        </div>
 
-                          <p className="text-xs text-slate-500 leading-relaxed">
-                            Videos de 45s, fotos de proyectos, brochures ejecutivos y fichas comerciales.
-                            <strong className="text-slate-700 font-semibold"> La IA los enviará por WhatsApp cuando el prospecto lo amerite.</strong>
-                          </p>
-
-                          {/* Lista de archivos compartibles */}
-                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {shareableFiles.length === 0 ? (
-                              <div className="py-6 text-center text-slate-400 text-xs italic">
-                                Maletín vacío. Sube videos o folletos.
+                        {/* LAS 3 ZONAS OFICIALES */}
+                        <div className="space-y-6">
+                          {/* 🔒 ZONA 1: DOCUMENTOS DE ESTUDIO */}
+                          <div className="rounded-2xl border-2 border-dashed border-amber-300/80 bg-amber-50/20 p-5 space-y-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                                  <FolderLock className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-900">
+                                    Zona 1: Documentos de Estudio
+                                  </h4>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    Manuales, fichas técnicas y notas. Es solo para que la IA aprenda; <strong>nunca se envían al cliente</strong>.
+                                  </p>
+                                </div>
                               </div>
-                            ) : (
-                              shareableFiles.map((f) => (
-                                <div
-                                  key={f.id}
-                                  className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0 pr-2">
-                                    <span className="text-sm">
-                                      {f.file_type.includes('image')
-                                        ? '🖼️'
-                                        : f.file_type.includes('video')
-                                        ? '🎥'
-                                        : '📄'}
-                                    </span>
-                                    <span className="truncate font-medium text-slate-700">{f.file_name}</span>
-                                    {f.ghl_media_url && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-50 text-emerald-700 rounded border border-emerald-200">
-                                        CDN Listo
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                                🔒 100% Confidencial
+                              </span>
+                            </div>
+
+                            {/* Lista de archivos de estudio */}
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                              {productStudyFiles.length === 0 ? (
+                                <div className="py-4 text-center text-slate-400 text-xs italic">
+                                  Sin documentos de estudio para este producto. Sube manuales o fichas técnicas.
+                                </div>
+                              ) : (
+                                productStudyFiles.map((f) => (
+                                  <div
+                                    key={f.id}
+                                    className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                                      <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      <span className="truncate font-medium text-slate-700">{f.file_name}</span>
+                                      <span className="text-[10px] text-slate-400">
+                                        ({(f.file_size / 1024).toFixed(0)} KB)
                                       </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    {f.file_url && (
-                                      <a
-                                        href={f.file_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-slate-400 hover:text-indigo-600 p-1"
-                                        title="Ver archivo"
-                                      >
-                                        <ExternalLink className="w-3.5 h-3.5" />
-                                      </a>
-                                    )}
+                                    </div>
                                     <button
                                       onClick={() => handleDeleteFile(f.id)}
-                                      className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                                      title="Eliminar archivo"
+                                      className="text-slate-400 hover:text-rose-600 p-1"
+                                      title="Eliminar"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   </div>
+                                ))
+                              )}
+                            </div>
+
+                            <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-slate-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
+                              <UploadCloud className="w-4 h-4 text-amber-700" />
+                              <span>Subir Documentos Internos (PDF / Word)</span>
+                              <input
+                                type="file"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => handleUploadToProduct('material_estudio', e.target.files)}
+                                disabled={actionLoading}
+                              />
+                            </label>
+                          </div>
+
+                          {/* 📱 ZONA 2: ARCHIVOS PARA ENVIAR POR WHATSAPP */}
+                          <div className="rounded-2xl border-2 border-dashed border-emerald-300/80 bg-emerald-50/20 p-5 space-y-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                                  <FolderHeart className="w-4 h-4" />
                                 </div>
-                              ))
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-900">
+                                    Zona 2: Archivos para Enviar por WhatsApp
+                                  </h4>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    Videos, fotos y folletos en PDF que la IA le mandará al cliente cuando pregunte por este producto.
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
+                                📱 El Maletín
+                              </span>
+                            </div>
+
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                              {productShareableFiles.length === 0 ? (
+                                <div className="py-4 text-center text-slate-400 text-xs italic">
+                                  Maletín vacío para este producto. Sube un video demo o fotos.
+                                </div>
+                              ) : (
+                                productShareableFiles.map((f) => (
+                                  <div
+                                    key={f.id}
+                                    className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                                      <span>
+                                        {f.file_type === 'video' ? '🎥' : f.file_type === 'image' ? '🖼️' : '📄'}
+                                      </span>
+                                      <span className="truncate font-medium text-slate-700">{f.file_name}</span>
+                                      {f.cdn_url && (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-50 text-emerald-700 rounded border border-emerald-200">
+                                          WhatsApp Listo
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      {f.cdn_url && (
+                                        <a
+                                          href={f.cdn_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-slate-400 hover:text-indigo-600 p-1"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                        </a>
+                                      )}
+                                      <button
+                                        onClick={() => handleDeleteFile(f.id)}
+                                        className="text-slate-400 hover:text-rose-600 p-1"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+
+                            <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer transition-all shadow-sm">
+                              <UploadCloud className="w-4 h-4 text-white" />
+                              <span>Subir Archivos para WhatsApp (Videos / Fotos / PDF)</span>
+                              <input
+                                type="file"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => handleUploadToProduct('material_compartible', e.target.files)}
+                                disabled={actionLoading}
+                              />
+                            </label>
+                          </div>
+
+                          {/* 🧠 ZONA 3: FICHA DE CONOCIMIENTO (INFORMACIÓN ESTRUCTURADA PARA LA IA) */}
+                          <div className="rounded-2xl border border-indigo-200 bg-white p-5 space-y-4 shadow-sm">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                              <div>
+                                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                                  Zona 3: Ficha de Conocimiento (Información estructurada para la IA)
+                                </h4>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  La síntesis técnica y comercial que la IA aprendió de tus documentos para asesorar y vender.
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={handleSynthesizeProductSheet}
+                                disabled={synthesizingProduct}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95 shrink-0"
+                              >
+                                <Zap className={`w-3.5 h-3.5 ${synthesizingProduct ? 'animate-bounce text-amber-400' : ''}`} />
+                                <span>{synthesizingProduct ? 'Sintetizando Ficha...' : '⚡ Sintetizar Ficha de Conocimiento'}</span>
+                              </button>
+                            </div>
+
+                            {selectedProduct?.knowledge_sheet ? (
+                              <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text">
+                                {selectedProduct.knowledge_sheet}
+                              </div>
+                            ) : (
+                              <div className="py-8 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                La Ficha de Conocimiento aún no ha sido destilada. Haz clic en el botón <strong>&quot;⚡ Sintetizar Ficha de Conocimiento&quot;</strong> para que la IA procese los datos de este producto.
+                              </div>
                             )}
                           </div>
                         </div>
-
-                        <div className="mt-4 pt-3 border-t border-indigo-100">
-                          <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold cursor-pointer transition-all shadow-sm">
-                            <UploadCloud className="w-4 h-4 text-white" />
-                            <span>Subir al Maletín (Videos / Fotos / PDF)</span>
-                            <input
-                              type="file"
-                              multiple
-                              className="hidden"
-                              onChange={(e) => handleUpload('material_compartible', e.target.files)}
-                              disabled={actionLoading}
-                            />
-                          </label>
-                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
-                {/* PESTAÑA 2: SEGUNDO CEREBRO (.MD) */}
+                {/* ══════════════ PESTAÑA: RED NEURONAL (GRAFO) ══════════════ */}
+                {activeTab === 'grafo' && (
+                  <div className="space-y-4">
+                    <SecondBrainGraph
+                      businessName={selectedAgent?.name ? `Catálogo: ${selectedAgent.name}` : 'Segundo Cerebro'}
+                      agents={agents.map((a) => ({ id: a.id, name: a.name, role: a.role }))}
+                      products={products.map((p) => ({
+                        id: p.id,
+                        name: p.name,
+                        short_description: p.short_description,
+                        study_files_count: p.study_files_count,
+                        shareable_files_count: p.shareable_files_count,
+                        has_knowledge_sheet: p.has_knowledge_sheet,
+                      }))}
+                      onSelectProduct={(pId) => {
+                        const targetProd = products.find((p) => p.id === pId);
+                        if (targetProd) {
+                          handleOpenProduct(targetProd);
+                          setActiveTab('productos');
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* ══════════════ PESTAÑA: PERSONALIDAD Y TONO (IA-SOUL) ══════════════ */}
+                {activeTab === 'soul' && (
+                  <div className="space-y-6 max-w-2xl">
+                    <div className="p-4 rounded-2xl bg-rose-50/60 border border-rose-200/80 flex items-start gap-3">
+                      <Heart className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-sm font-bold text-rose-950">El Alma del Agente (ia-soul)</h4>
+                        <p className="text-xs text-rose-900/80 mt-0.5">
+                          Define la calidez, modismos y reglas de trato humano. La IA consultará los datos fríos del catálogo pero responderá con esta personalidad.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Presets Rápidos */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        1. Estilo de Personalidad Predeterminado (1 Clic)
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSoulPreset('calido_humano');
+                            setSoulWarmth(9);
+                            setSoulFormality(3);
+                            setSoulClosingStyle(5);
+                            setSoulTechnicalLevel(4);
+                          }}
+                          className={`p-3 rounded-2xl border text-center transition-all ${
+                            soulPreset === 'calido_humano' ? 'border-rose-500 bg-rose-50/50 ring-2 ring-rose-500/20' : 'border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="text-xl mb-1">🌟</div>
+                          <div className="text-xs font-bold text-slate-900">Cálido y Humano</div>
+                          <div className="text-[10px] text-slate-500">Clínicas y Confianza</div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSoulPreset('vendedor_consultivo');
+                            setSoulWarmth(7);
+                            setSoulFormality(5);
+                            setSoulClosingStyle(8);
+                            setSoulTechnicalLevel(6);
+                          }}
+                          className={`p-3 rounded-2xl border text-center transition-all ${
+                            soulPreset === 'vendedor_consultivo' ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20' : 'border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="text-xl mb-1">🎯</div>
+                          <div className="text-xs font-bold text-slate-900">Vendedor Consultivo</div>
+                          <div className="text-[10px] text-slate-500">Chris Voss / Cierres</div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSoulPreset('tecnico_experto');
+                            setSoulWarmth(5);
+                            setSoulFormality(8);
+                            setSoulClosingStyle(6);
+                            setSoulTechnicalLevel(9);
+                          }}
+                          className={`p-3 rounded-2xl border text-center transition-all ${
+                            soulPreset === 'tecnico_experto' ? 'border-cyan-600 bg-cyan-50/50 ring-2 ring-cyan-600/20' : 'border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="text-xl mb-1">🔬</div>
+                          <div className="text-xs font-bold text-slate-900">Técnico Experto</div>
+                          <div className="text-[10px] text-slate-500">Drones y Datos Duros</div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSoulPreset('paciencia_soporte');
+                            setSoulWarmth(9);
+                            setSoulFormality(6);
+                            setSoulClosingStyle(3);
+                            setSoulTechnicalLevel(6);
+                          }}
+                          className={`p-3 rounded-2xl border text-center transition-all ${
+                            soulPreset === 'paciencia_soporte' ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600/20' : 'border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="text-xl mb-1">🛡️</div>
+                          <div className="text-xs font-bold text-slate-900">Paciencia y Soporte</div>
+                          <div className="text-[10px] text-slate-500">Escucha Activa</div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Sliders de Temperamento */}
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                        2. Ajuste Fino de Temperamento
+                      </label>
+
+                      {/* Calidez */}
+                      <div>
+                        <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+                          <span>Empatía y Calidez Humana</span>
+                          <span className="text-rose-600 font-bold">{soulWarmth} / 10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          value={soulWarmth}
+                          onChange={(e) => setSoulWarmth(Number(e.target.value))}
+                          className="w-full accent-rose-600 cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Formalidad */}
+                      <div>
+                        <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+                          <span>Formalidad (Casual vs Clínico)</span>
+                          <span className="text-indigo-600 font-bold">{soulFormality} / 10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          value={soulFormality}
+                          onChange={(e) => setSoulFormality(Number(e.target.value))}
+                          className="w-full accent-indigo-600 cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Estilo de Cierre */}
+                      <div>
+                        <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+                          <span>Proactividad al Cierre (Micro-compromisos)</span>
+                          <span className="text-amber-600 font-bold">{soulClosingStyle} / 10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          value={soulClosingStyle}
+                          onChange={(e) => setSoulClosingStyle(Number(e.target.value))}
+                          className="w-full accent-amber-600 cursor-pointer"
+                        />
+                      </div>
+
+                      {/* Nivel Técnico */}
+                      <div>
+                        <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+                          <span>Nivel Técnico (Explicación Sencilla vs Datos de Ingeniería)</span>
+                          <span className="text-cyan-600 font-bold">{soulTechnicalLevel} / 10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          value={soulTechnicalLevel}
+                          onChange={(e) => setSoulTechnicalLevel(Number(e.target.value))}
+                          className="w-full accent-cyan-600 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Reglas de Oro Libres del Alma */}
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        3. Instrucciones Especiales del Alma (ia-soul)
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={soulCustomRules}
+                        onChange={(e) => setSoulCustomRules(e.target.value)}
+                        placeholder="Ej. Habla como una asesora joven, educada y cálida. Si el cliente tiene dolor dental, muestra genuina preocupación antes de intentar agendar. Usa un emoji ocasional. Nunca digas que eres una IA."
+                        className="w-full rounded-xl border border-slate-300 p-3.5 text-xs text-slate-800 outline-none focus:border-rose-500 leading-relaxed"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleSaveSettings}
+                      disabled={actionLoading}
+                      className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20 active:scale-95 disabled:opacity-50"
+                    >
+                      {actionLoading ? 'Guardando Alma...' : 'Guardar Personalidad del Agente'}
+                    </button>
+                  </div>
+                )}
+
+                {/* ══════════════ PESTAÑA: SEGUNDO CEREBRO GLOBAL ══════════════ */}
                 {activeTab === 'cerebro' && (
                   <div className="space-y-4">
                     {brainDocs.length === 0 ? (
                       <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 space-y-3">
                         <FileCode className="w-10 h-10 mx-auto text-slate-300" />
-                        <h3 className="text-sm font-bold text-slate-700">El Segundo Cerebro aún no ha sido sintetizado</h3>
+                        <h3 className="text-sm font-bold text-slate-700">El Segundo Cerebro Global no ha sido sintetizado</h3>
                         <p className="text-xs text-slate-500 max-w-md mx-auto">
-                          Sube tu material de estudio y el maletín de WhatsApp, luego presiona el botón{' '}
-                          <strong>&quot;Encender Fábrica&quot;</strong> para generar los 7 archivos Markdown.
+                          Genera los 7 pilares cognitivos maestros (identidad, negociación FBI, objeciones y catálogo).
                         </p>
                         <button
-                          onClick={handleSynthesizeBrain}
-                          disabled={synthesizing}
+                          onClick={handleSynthesizeGlobalBrain}
+                          disabled={synthesizingGlobal}
                           className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 shadow-sm"
                         >
-                          ⚡ Encender Fábrica Ahora
+                          ⚡ Encender Fábrica Global
                         </button>
                       </div>
                     ) : (
@@ -1033,11 +1437,7 @@ export default function AgentsFactoryView() {
                                 }`}
                               >
                                 <span className="truncate">{doc.title}</span>
-                                <ChevronRight
-                                  className={`w-3.5 h-3.5 shrink-0 ${
-                                    isCurrent ? 'text-indigo-600' : 'text-slate-400'
-                                  }`}
-                                />
+                                <ChevronRight className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-600' : 'text-slate-400'}`} />
                               </button>
                             );
                           })}
@@ -1048,25 +1448,19 @@ export default function AgentsFactoryView() {
                             <span className="text-indigo-400 font-bold font-sans text-sm">
                               {currentBrainDoc?.title || 'Documento'}
                             </span>
-                            <div className="flex items-center gap-2 font-sans">
-                              <span className="text-[10px] text-slate-500">
-                                v{currentBrainDoc?.version || 1} • Markdown
-                              </span>
-                              <button
-                                onClick={() => {
-                                  if (currentBrainDoc?.markdown_content) {
-                                    navigator.clipboard.writeText(currentBrainDoc.markdown_content);
-                                    alert('Markdown copiado al portapapeles');
-                                  }
-                                }}
-                                className="p-1 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                                title="Copiar Markdown"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => {
+                                if (currentBrainDoc?.markdown_content) {
+                                  navigator.clipboard.writeText(currentBrainDoc.markdown_content);
+                                  alert('Copiado al portapapeles');
+                                }
+                              }}
+                              className="p-1 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white"
+                              title="Copiar"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-
                           <div className="overflow-y-auto mt-3 pr-2 text-slate-300 leading-relaxed whitespace-pre-wrap select-text">
                             {currentBrainDoc?.markdown_content}
                           </div>
@@ -1076,7 +1470,7 @@ export default function AgentsFactoryView() {
                   </div>
                 )}
 
-                {/* PESTAÑA 3: GIMNASIO DE ROLE-PLAYING */}
+                {/* ══════════════ PESTAÑA: GIMNASIO DE ROLE-PLAYING ══════════════ */}
                 {activeTab === 'gimnasio' && (
                   <div className="space-y-6">
                     <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1086,184 +1480,71 @@ export default function AgentsFactoryView() {
                           Gimnasio de Auto-Entrenamiento (Self-Play)
                         </h3>
                         <p className="text-xs text-amber-800/80 mt-0.5">
-                          Un Comprador Escéptico pone a prueba a tu agente con {selectedAgent.llm_model}. Aprueba o ajusta en 1 clic.
+                          Un Comprador Escéptico pone a prueba a tu agente. Aprueba o ajusta en 1 clic.
                         </p>
                       </div>
 
                       <button
                         onClick={handleRunSimulation}
                         disabled={simulating}
-                        className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-all shadow-sm flex items-center gap-2 active:scale-95 shrink-0"
+                        className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-sm flex items-center gap-2 active:scale-95 shrink-0"
                       >
                         <Play className={`w-3.5 h-3.5 ${simulating ? 'animate-spin' : ''}`} />
-                        <span>{simulating ? 'Simulando Combate...' : 'Generar Nuevo Combate'}</span>
+                        <span>{simulating ? 'Simulando...' : 'Generar Nuevo Combate'}</span>
                       </button>
                     </div>
 
                     {simulations.length === 0 ? (
                       <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-300 space-y-2">
                         <Sliders className="w-8 h-8 mx-auto text-slate-300" />
-                        <p className="text-xs text-slate-500 font-medium">No hay combates de simulación aún.</p>
-                        <button
-                          onClick={handleRunSimulation}
-                          className="text-xs text-amber-700 font-semibold hover:underline"
-                        >
-                          Haz clic para iniciar tu primera prueba de fuego
-                        </button>
+                        <p className="text-xs text-slate-500 font-medium">No hay combates simulados aún.</p>
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {simulations.map((sim) => {
-                          const isApproved = sim.status === 'approved';
-                          const isNeedsAdjustment = sim.status === 'needs_adjustment';
-
-                          return (
-                            <div
-                              key={sim.id}
-                              className={`rounded-2xl border p-5 transition-all space-y-4 ${
-                                isApproved
-                                  ? 'bg-emerald-50/20 border-emerald-200'
-                                  : isNeedsAdjustment
-                                  ? 'bg-rose-50/20 border-rose-200'
-                                  : 'bg-white border-slate-200 shadow-sm'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-slate-900">{sim.scenario_title}</span>
-                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                                      {sim.buyer_persona}
-                                    </span>
-                                  </div>
-                                  <p className="text-[11px] text-slate-400 mt-0.5">
-                                    {new Date(sim.created_at).toLocaleString()}
-                                  </p>
-                                </div>
-
-                                <div>
-                                  <span
-                                    className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                                      isApproved
-                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                        : isNeedsAdjustment
-                                        ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                                        : 'bg-amber-100 text-amber-800 border border-amber-200'
-                                    }`}
-                                  >
-                                    {isApproved
-                                      ? '✅ Aprobado'
-                                      : isNeedsAdjustment
-                                      ? '⚠️ Ajustado'
-                                      : '⏳ Pendiente de Aprobación'}
-                                  </span>
-                                </div>
+                        {simulations.map((sim) => (
+                          <div key={sim.id} className="rounded-2xl border p-5 bg-white border-slate-200 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                              <div>
+                                <span className="text-xs font-bold text-slate-900">{sim.scenario_title}</span>
+                                <p className="text-[11px] text-slate-400">{sim.buyer_persona}</p>
                               </div>
-
-                              <div className="space-y-3 bg-slate-50/80 rounded-xl p-4 max-h-80 overflow-y-auto">
-                                {sim.dialogue?.map((msg, idx) => {
-                                  const isAgent = msg.sender === 'agent';
-                                  return (
-                                    <div
-                                      key={idx}
-                                      className={`flex flex-col ${isAgent ? 'items-end' : 'items-start'}`}
-                                    >
-                                      <div className="flex items-center gap-1.5 mb-1">
-                                        <span className="text-[10px] font-bold text-slate-400">
-                                          {isAgent ? `🤖 ${selectedAgent.name} (Agente)` : '👤 Comprador Escéptico'}
-                                        </span>
-                                      </div>
-                                      <div
-                                        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${
-                                          isAgent
-                                            ? 'bg-indigo-600 text-white rounded-tr-sm shadow-sm'
-                                            : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-sm shadow-sm'
-                                        }`}
-                                      >
-                                        <p>{msg.text}</p>
-                                        {msg.attachment && (
-                                          <div className="mt-2 pt-2 border-t border-indigo-400/40 text-[11px] flex items-center gap-1.5 font-semibold">
-                                            <span>📎 Adjunto del Maletín:</span>
-                                            <span className="underline">{msg.attachment}</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
-                                <div className="text-xs text-slate-600">
-                                  {sim.evaluation?.summary && (
-                                    <p className="italic text-slate-500">
-                                      💡 Calificación IA: {sim.evaluation.summary}
-                                    </p>
-                                  )}
-                                  {sim.feedback_notes && (
-                                    <p className="text-amber-800 font-medium mt-1">
-                                      ✏️ Notas de Ajuste: {sim.feedback_notes}
-                                    </p>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {!isApproved && (
-                                    <>
-                                      <button
-                                        onClick={() => handleReviewSimulation(sim.id, 'approved')}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all active:scale-95"
-                                      >
-                                        <ThumbsUp className="w-3.5 h-3.5" />
-                                        <span>Aprobar</span>
-                                      </button>
-
-                                      <button
-                                        onClick={() => {
-                                          setFeedbackSimId(sim.id);
-                                          setFeedbackText(sim.feedback_notes || '');
-                                        }}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all active:scale-95"
-                                      >
-                                        <Sliders className="w-3.5 h-3.5" />
-                                        <span>Ajustar</span>
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-
-                              {feedbackSimId === sim.id && (
-                                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2 mt-2">
-                                  <label className="text-xs font-bold text-amber-900 block">
-                                    Instrucción o ajuste para el agente:
-                                  </label>
-                                  <div className="flex gap-2">
-                                    <input
-                                      type="text"
-                                      value={feedbackText}
-                                      onChange={(e) => setFeedbackText(e.target.value)}
-                                      placeholder="Escribe el ajuste..."
-                                      className="flex-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:ring-1 focus:ring-amber-500"
-                                    />
-                                    <button
-                                      onClick={() => handleReviewSimulation(sim.id, 'needs_adjustment', feedbackText)}
-                                      className="px-3 py-1.5 rounded-lg bg-amber-700 text-white text-xs font-semibold hover:bg-amber-800 transition-colors"
-                                    >
-                                      Guardar Ajuste
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
+                                {sim.status === 'approved' ? '✅ Aprobado' : '⏳ En Revisión'}
+                              </span>
                             </div>
-                          );
-                        })}
+
+                            <div className="space-y-3 bg-slate-50 p-4 rounded-xl max-h-80 overflow-y-auto">
+                              {sim.dialogue?.map((msg, i) => (
+                                <div key={i} className={`flex flex-col ${msg.sender === 'agent' ? 'items-end' : 'items-start'}`}>
+                                  <span className="text-[10px] font-bold text-slate-400 mb-1">
+                                    {msg.sender === 'agent' ? `🤖 ${selectedAgent.name}` : '👤 Comprador Escéptico'}
+                                  </span>
+                                  <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-xs ${msg.sender === 'agent' ? 'bg-indigo-600 text-white' : 'bg-white border text-slate-800'}`}>
+                                    {msg.text}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {sim.status !== 'approved' && (
+                              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                                <button
+                                  onClick={() => handleReviewSimulation(sim.id, 'approved')}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold"
+                                >
+                                  <ThumbsUp className="w-3.5 h-3.5" />
+                                  <span>Aprobar</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* PESTAÑA 4: AJUSTES & MODELO LLM */}
+                {/* ══════════════ PESTAÑA: AJUSTES ══════════════ */}
                 {activeTab === 'ajustes' && (
                   <div className="space-y-6 max-w-xl">
                     <div className="space-y-4">
@@ -1352,11 +1633,9 @@ export default function AgentsFactoryView() {
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                            Modelo Específico ({editProvider.toUpperCase()})
+                            Modelo ({editProvider.toUpperCase()})
                           </label>
-                          <span className="text-[11px] text-indigo-600 font-semibold">
-                            Lista Oficial Vigente
-                          </span>
+                          <span className="text-[11px] text-indigo-600 font-semibold">Lista Oficial Vigente</span>
                         </div>
                         <select
                           value={editModel}
@@ -1364,18 +1643,11 @@ export default function AgentsFactoryView() {
                           className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600 bg-white"
                         >
                           {modelCatalog[editProvider]?.map((m) => (
-                            <option
-                              key={m.id}
-                              value={m.id}
-                              disabled={m.status === 'deprecated'}
-                            >
-                              {m.name} {m.status === 'deprecated' ? '⛔ (DESCONTINUADO)' : ''}
+                            <option key={m.id} value={m.id} disabled={m.status === 'deprecated'}>
+                              {m.name}
                             </option>
                           ))}
                         </select>
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          {modelCatalog[editProvider]?.find((m) => m.id === editModel)?.description}
-                        </p>
                       </div>
 
                       <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 flex items-center justify-between">
@@ -1383,7 +1655,7 @@ export default function AgentsFactoryView() {
                           <Key className="w-4 h-4 text-indigo-600 shrink-0" />
                           <div className="text-xs text-slate-700">
                             <p className="font-semibold">Credenciales y API Keys centralizadas</p>
-                            <p className="text-slate-500 mt-0.5">Tus llaves de Gemini, Claude y OpenAI se administran en el panel de Configuración.</p>
+                            <p className="text-slate-500 mt-0.5">Tus llaves de Gemini, Claude y OpenAI se administran en Configuración.</p>
                           </div>
                         </div>
                         <a
@@ -1400,7 +1672,7 @@ export default function AgentsFactoryView() {
                           disabled={actionLoading}
                           className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all active:scale-95"
                         >
-                          {actionLoading ? 'Guardando...' : 'Guardar Ajustes del Agente'}
+                          {actionLoading ? 'Guardando...' : 'Guardar Ajustes'}
                         </button>
                       </div>
                     </div>
@@ -1411,14 +1683,111 @@ export default function AgentsFactoryView() {
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center text-slate-400 space-y-3">
               <Bot className="w-12 h-12 mx-auto text-slate-300" />
-              <p className="text-sm font-medium">Selecciona un agente a la izquierda para entrar a su taller.</p>
+              <p className="text-sm font-medium">Selecciona un agente a la izquierda para ver sus productos y taller.</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* MODAL CREAR NUEVO AGENTE */}
-      {createModalOpen && (
+      {/* MODAL: AGREGAR PRODUCTO O SERVICIO */}
+      {createProductModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Agregar Producto o Servicio</h3>
+                  <p className="text-xs text-slate-500">Crea una nueva cápsula en el catálogo del agente</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCreateProductModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  1. Nombre del Producto o Servicio
+                </label>
+                <input
+                  type="text"
+                  value={newProdName}
+                  onChange={(e) => setNewProdName(e.target.value)}
+                  placeholder="Ej. Invisalign, Dron Modelo X, PHIX, Implantes..."
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  2. ¿Para qué sirve? / Dolor que resuelve (1 renglón)
+                </label>
+                <input
+                  type="text"
+                  value={newProdDesc}
+                  onChange={(e) => setNewProdDesc(e.target.value)}
+                  placeholder="Ej. Ortodoncia invisible sin brackets para alinear dientes en adultos"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  3. ¿Cuándo ofrecerlo? (Síntomas o palabras del cliente)
+                </label>
+                <input
+                  type="text"
+                  value={newProdTriggers}
+                  onChange={(e) => setNewProdTriggers(e.target.value)}
+                  placeholder="Ej. Dientes chuecos, estética dental, no quiere brackets metálicos"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  4. Rango de precio u oferta gancho
+                </label>
+                <input
+                  type="text"
+                  value={newProdPrice}
+                  onChange={(e) => setNewProdPrice(e.target.value)}
+                  placeholder="Ej. Desde $15,000 MXN o $1,500/mes con valoración inicial gratis"
+                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setCreateProductModal(false)}
+                  className="px-4 py-2 rounded-xl text-slate-500 hover:text-slate-800 text-xs font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateProduct}
+                  disabled={actionLoading || !newProdName.trim()}
+                  className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 disabled:opacity-50"
+                >
+                  {actionLoading ? 'Creando...' : 'Crear Producto'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREAR AGENTE */}
+      {createAgentModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -1432,19 +1801,18 @@ export default function AgentsFactoryView() {
                 </div>
               </div>
               <button
-                onClick={() => setCreateModalOpen(false)}
+                onClick={() => setCreateAgentModal(false)}
                 className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1"
               >
                 ✕
               </button>
             </div>
 
-            {/* Paso 1 */}
             {createStep === 1 && (
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    1. Selecciona la Misión del Agente
+                    1. Misión del Agente
                   </label>
                   <div className="grid grid-cols-3 gap-2.5">
                     <button
@@ -1454,9 +1822,7 @@ export default function AgentsFactoryView() {
                         setNewAgentRole('Setter Comercial WhatsApp');
                       }}
                       className={`p-3 rounded-2xl border text-center transition-all ${
-                        newAgentMission === 'ventas_setter'
-                          ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
-                          : 'border-slate-200 hover:bg-slate-50'
+                        newAgentMission === 'ventas_setter' ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20' : 'border-slate-200'
                       }`}
                     >
                       <div className="text-2xl mb-1">🎯</div>
@@ -1471,9 +1837,7 @@ export default function AgentsFactoryView() {
                         setNewAgentRole('Closer de Alto Valor');
                       }}
                       className={`p-3 rounded-2xl border text-center transition-all ${
-                        newAgentMission === 'ventas_closer'
-                          ? 'border-amber-600 bg-amber-50/50 ring-2 ring-amber-600/20'
-                          : 'border-slate-200 hover:bg-slate-50'
+                        newAgentMission === 'ventas_closer' ? 'border-amber-600 bg-amber-50/50 ring-2 ring-amber-600/20' : 'border-slate-200'
                       }`}
                     >
                       <div className="text-2xl mb-1">💰</div>
@@ -1488,9 +1852,7 @@ export default function AgentsFactoryView() {
                         setNewAgentRole('Soporte y Éxito al Cliente');
                       }}
                       className={`p-3 rounded-2xl border text-center transition-all ${
-                        newAgentMission === 'servicio_soporte'
-                          ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-600/20'
-                          : 'border-slate-200 hover:bg-slate-50'
+                        newAgentMission === 'servicio_soporte' ? 'border-teal-600 bg-teal-50/50 ring-2 ring-teal-600/20' : 'border-slate-200'
                       }`}
                     >
                       <div className="text-2xl mb-1">🛡️</div>
@@ -1509,19 +1871,7 @@ export default function AgentsFactoryView() {
                     value={newAgentName}
                     onChange={(e) => setNewAgentName(e.target.value)}
                     placeholder="Ej. Sofía | Asesora Comercial WhatsApp"
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    3. Rol visible
-                  </label>
-                  <input
-                    type="text"
-                    value={newAgentRole}
-                    onChange={(e) => setNewAgentRole(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/10"
+                    className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600"
                   />
                 </div>
 
@@ -1529,13 +1879,10 @@ export default function AgentsFactoryView() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (!newAgentName.trim()) {
-                        alert('Ingresa un nombre para el agente');
-                        return;
-                      }
+                      if (!newAgentName.trim()) return alert('Ingresa un nombre para el agente');
                       setCreateStep(2);
                     }}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md active:scale-95"
                   >
                     <span>Siguiente: Proveedor & Modelo</span>
                     <ChevronRight className="w-4 h-4" />
@@ -1544,7 +1891,6 @@ export default function AgentsFactoryView() {
               </div>
             )}
 
-            {/* Paso 2 */}
             {createStep === 2 && (
               <div className="space-y-4">
                 <div>
@@ -1554,11 +1900,12 @@ export default function AgentsFactoryView() {
                   <div className="grid grid-cols-3 gap-2.5">
                     <button
                       type="button"
-                      onClick={() => setNewAgentProvider('google')}
+                      onClick={() => {
+                        setNewAgentProvider('google');
+                        setNewAgentModel('gemini-2.0-flash');
+                      }}
                       className={`p-3 rounded-2xl border text-center transition-all ${
-                        newAgentProvider === 'google'
-                          ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
-                          : 'border-slate-200 hover:bg-slate-50'
+                        newAgentProvider === 'google' ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20' : 'border-slate-200'
                       }`}
                     >
                       <div className="text-xl mb-1">✨</div>
@@ -1568,11 +1915,12 @@ export default function AgentsFactoryView() {
 
                     <button
                       type="button"
-                      onClick={() => setNewAgentProvider('anthropic')}
+                      onClick={() => {
+                        setNewAgentProvider('anthropic');
+                        setNewAgentModel('claude-3-5-sonnet-20241022');
+                      }}
                       className={`p-3 rounded-2xl border text-center transition-all ${
-                        newAgentProvider === 'anthropic'
-                          ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
-                          : 'border-slate-200 hover:bg-slate-50'
+                        newAgentProvider === 'anthropic' ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20' : 'border-slate-200'
                       }`}
                     >
                       <div className="text-xl mb-1">⚡</div>
@@ -1582,11 +1930,12 @@ export default function AgentsFactoryView() {
 
                     <button
                       type="button"
-                      onClick={() => setNewAgentProvider('openai')}
+                      onClick={() => {
+                        setNewAgentProvider('openai');
+                        setNewAgentModel('gpt-4o');
+                      }}
                       className={`p-3 rounded-2xl border text-center transition-all ${
-                        newAgentProvider === 'openai'
-                          ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20'
-                          : 'border-slate-200 hover:bg-slate-50'
+                        newAgentProvider === 'openai' ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-600/20' : 'border-slate-200'
                       }`}
                     >
                       <div className="text-xl mb-1">🤖</div>
@@ -1596,14 +1945,13 @@ export default function AgentsFactoryView() {
                   </div>
                 </div>
 
-                {/* Selector Desplegable Dinámico de Modelos */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      2. Modelo Disponible ({newAgentProvider.toUpperCase()})
+                      2. Modelo ({newAgentProvider.toUpperCase()})
                     </label>
                     <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
-                      Vigente
+                      Oficial Vigente
                     </span>
                   </div>
                   <select
@@ -1612,30 +1960,19 @@ export default function AgentsFactoryView() {
                     className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-600 bg-white"
                   >
                     {modelCatalog[newAgentProvider]?.map((m) => (
-                      <option
-                        key={m.id}
-                        value={m.id}
-                        disabled={m.status === 'deprecated'}
-                      >
-                        {m.name} {m.status === 'deprecated' ? '⛔ (DESCONTINUADO)' : ''}
+                      <option key={m.id} value={m.id} disabled={m.status === 'deprecated'}>
+                        {m.name}
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    {modelCatalog[newAgentProvider]?.find((m) => m.id === newAgentModel)?.description}
-                  </p>
                 </div>
 
                 <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Key className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <span>Las API Keys de Gemini, Claude y OpenAI se gestionan centralizadas en <strong>Configuración</strong>.</span>
+                    <span>Las API Keys se configuran centralizadas en <strong>Configuración</strong>.</span>
                   </div>
-                  <a
-                    href="/admin/settings"
-                    target="_blank"
-                    className="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline shrink-0 ml-2"
-                  >
+                  <a href="/admin/settings" target="_blank" className="text-xs text-indigo-600 font-bold underline shrink-0 ml-2">
                     Ver Configuración
                   </a>
                 </div>
@@ -1654,9 +1991,9 @@ export default function AgentsFactoryView() {
                     type="button"
                     onClick={handleCreateAgent}
                     disabled={actionLoading}
-                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                    className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md active:scale-95"
                   >
-                    {actionLoading ? 'Creando...' : 'Crear y Entrar al Taller'}
+                    {actionLoading ? 'Creando...' : 'Crear Agente y Ver Catálogo'}
                   </button>
                 </div>
               </div>
