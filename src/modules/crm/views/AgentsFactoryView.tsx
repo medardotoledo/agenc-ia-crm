@@ -148,6 +148,9 @@ export default function AgentsFactoryView() {
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [scrapeUrlInput, setScrapeUrlInput] = useState('');
   const [scrapingUrl, setScrapingUrl] = useState(false);
+  const [scrapingStatus, setScrapingStatus] = useState<{ stage: string; percent: number } | null>(null);
+  const [scrapeInlineSuccess, setScrapeInlineSuccess] = useState<{ title: string; wordCount: number } | null>(null);
+  const [scrapeInlineError, setScrapeInlineError] = useState<string | null>(null);
 
   // Cerebro global y simulaciones
   const [brainDocs, setBrainDocs] = useState<BrainDoc[]>([]);
@@ -452,11 +455,22 @@ export default function AgentsFactoryView() {
     setTimeout(() => setCopiedSheet(false), 3000);
   };
 
-  // Extraer información desde URL web
+  // Extraer información desde URL web con barra de progreso y etapas
   const handleScrapeUrl = async () => {
     if (!selectedAgentId || !selectedProductId || !scrapeUrlInput.trim()) return;
     setScrapingUrl(true);
-    setError(null);
+    setScrapeInlineError(null);
+    setScrapeInlineSuccess(null);
+    setScrapingStatus({ stage: '🌐 Conectando con el servidor web...', percent: 25 });
+
+    const stepTimer1 = setTimeout(() => {
+      setScrapingStatus({ stage: '🧹 Limpiando scripts, menús y extrayendo contenido útil...', percent: 65 });
+    }, 1100);
+
+    const stepTimer2 = setTimeout(() => {
+      setScrapingStatus({ stage: '🧠 Estructurando texto para el Segundo Cerebro...', percent: 88 });
+    }, 2300);
+
     try {
       const res = await fetch('/api/agents/' + selectedAgentId + '/knowledge/scrape-url', {
         method: 'POST',
@@ -470,16 +484,24 @@ export default function AgentsFactoryView() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al extraer contenido de la URL');
 
-      setSuccessMsg(`¡Página web procesada con éxito! Se extrajeron ${data.wordCount} palabras de estudio.`);
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      setScrapingStatus({ stage: '✅ ¡Completado!', percent: 100 });
+
+      setScrapeInlineSuccess({
+        title: data.title || data.file?.file_name || scrapeUrlInput,
+        wordCount: data.wordCount || 0,
+      });
       setScrapeUrlInput('');
-      setShowUrlInput(false);
       await fetchProductDetail(selectedAgentId, selectedProductId);
       await fetchProducts(selectedAgentId);
     } catch (err: any) {
-      setError(err.message);
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      setScrapeInlineError(err.message);
     } finally {
       setScrapingUrl(false);
-      setTimeout(() => setSuccessMsg(null), 4000);
+      setTimeout(() => setScrapingStatus(null), 1200);
     }
   };
 
@@ -1218,18 +1240,24 @@ export default function AgentsFactoryView() {
                             </div>
 
                             {showUrlInput && (
-                              <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 space-y-2 animate-fade-in">
-                                <label className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
-                                  <Globe className="w-3.5 h-3.5 text-blue-600" />
-                                  <span>Scraping de Página Web o Landing Page</span>
-                                </label>
+                              <div className="p-3.5 bg-blue-50/80 rounded-xl border border-blue-200 space-y-3 animate-fade-in">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                                    <Globe className="w-3.5 h-3.5 text-blue-600" />
+                                    <span>Scraping de Página Web o Landing Page</span>
+                                  </label>
+                                  <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full border border-blue-200">
+                                    Texto Automático
+                                  </span>
+                                </div>
+
                                 <div className="flex gap-2">
                                   <input
                                     type="url"
                                     value={scrapeUrlInput}
                                     onChange={(e) => setScrapeUrlInput(e.target.value)}
                                     placeholder="https://tuempresa.com/producto-o-servicio"
-                                    className="flex-1 px-3 py-2 text-xs bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                                    className="flex-1 px-3 py-2 text-xs bg-white border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 shadow-sm"
                                     disabled={scrapingUrl}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
@@ -1256,6 +1284,68 @@ export default function AgentsFactoryView() {
                                     )}
                                   </button>
                                 </div>
+
+                                {/* Barra de progreso de scraping */}
+                                {scrapingStatus && (
+                                  <div className="p-3 bg-white rounded-xl border border-blue-200 space-y-1.5 shadow-sm animate-pulse">
+                                    <div className="flex justify-between text-xs font-semibold text-blue-900">
+                                      <span className="flex items-center gap-1.5 truncate">
+                                        <RotateCw className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+                                        <span>{scrapingStatus.stage}</span>
+                                      </span>
+                                      <span className="text-blue-700 font-mono shrink-0">{scrapingStatus.percent}%</span>
+                                    </div>
+                                    <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                                      <div
+                                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${scrapingStatus.percent}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Feedback de éxito inline */}
+                                {scrapeInlineSuccess && (
+                                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start justify-between gap-2 shadow-sm animate-fade-in">
+                                    <div className="flex items-start gap-2">
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <p className="font-bold">¡Página web extraída y memorizada con éxito!</p>
+                                        <p className="text-emerald-700 text-[11px] mt-0.5">
+                                          Se incorporaron <strong>{scrapeInlineSuccess.wordCount.toLocaleString()} palabras</strong> de estudio técnico y comercial desde <em>{scrapeInlineSuccess.title}</em>.
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => setScrapeInlineSuccess(null)}
+                                      className="text-emerald-700 hover:text-emerald-950 font-bold text-sm px-1.5"
+                                      title="Cerrar notificación"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Feedback de error inline */}
+                                {scrapeInlineError && (
+                                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start justify-between gap-2 shadow-sm animate-fade-in">
+                                    <div className="flex items-start gap-2">
+                                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                      <div>
+                                        <p className="font-bold">No se pudo extraer la página</p>
+                                        <p className="text-rose-700 text-[11px] mt-0.5">{scrapeInlineError}</p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => setScrapeInlineError(null)}
+                                      className="text-rose-700 hover:text-rose-950 font-bold text-sm px-1.5"
+                                      title="Cerrar error"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                )}
+
                                 <p className="text-[11px] text-blue-700">
                                   La IA leerá el texto público de la página y lo guardará como material de estudio para este producto.
                                 </p>
