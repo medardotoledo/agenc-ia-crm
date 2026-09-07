@@ -102,24 +102,41 @@ Incluye exactamente estas secciones:
     let generatedSheet = '';
 
     if (provider === 'google') {
-      const modelName = agent.llm_model || 'gemini-2.0-flash';
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${effectiveApiKey}`;
+      const candidateModels = [
+        agent.llm_model && !agent.llm_model.startsWith('gemini-2') ? agent.llm_model : 'gemini-3.5-flash',
+        'gemini-3.5-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+      ];
+      const modelsToTry = Array.from(new Set(candidateModels));
 
-      const response = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `Error en Google Gemini (${response.status})`);
+      let lastError = '';
+      for (const mName of modelsToTry) {
+        try {
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${effectiveApiKey}`;
+          const response = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+            }),
+          });
+          if (response.ok) {
+            const resJson = await response.json();
+            generatedSheet = resJson.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (generatedSheet) break;
+          } else {
+            const errData = await response.json().catch(() => ({}));
+            lastError = errData.error?.message || `Error (${response.status}) en ${mName}`;
+          }
+        } catch (mErr: any) {
+          lastError = mErr.message;
+        }
       }
 
-      const resJson = await response.json();
-      generatedSheet = resJson.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!generatedSheet) {
+        throw new Error(lastError || 'No se pudo generar la síntesis con Google Gemini.');
+      }
     } else if (provider === 'anthropic' || effectiveApiKey.startsWith('sk-ant-')) {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
