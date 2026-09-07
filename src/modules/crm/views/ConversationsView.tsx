@@ -16,7 +16,11 @@ import {
   X,
   Play,
   Film,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Zap,
+  Shield,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, ChannelDot, CHANNEL_LABEL } from '@/modules/crm/components/ui'
@@ -33,11 +37,13 @@ const FILTERS: { id: Channel | 'todos'; label: string }[] = [
   { id: 'email', label: 'Email' },
 ]
 
+export type AiChatMode = 'ai_agent' | 'hybrid' | 'human';
+
 const AI_MODES = [
-  { id: 'bot', label: 'Bot', cls: 'bg-wa-bg text-wa-text' },
-  { id: 'hybrid', label: 'Híbrido', cls: 'bg-temp-hot-bg text-temp-hot-text' },
-  { id: 'agent', label: 'Agente', cls: 'bg-stage-new-bg text-stage-new-text' },
-] as const
+  { id: 'ai_agent' as const, label: '🤖 Agente IA', cls: 'bg-emerald-600 text-white font-bold shadow-xs' },
+  { id: 'hybrid' as const, label: '⚡ Híbrido', cls: 'bg-amber-500 text-white font-bold shadow-xs' },
+  { id: 'human' as const, label: '👤 Humano', cls: 'bg-slate-700 text-white font-bold shadow-xs' },
+] as const;
 
 const REPLY_CHANNELS = ['whatsapp', 'email', 'internal'] as const
 
@@ -55,7 +61,11 @@ export default function ConversationsView() {
   } = useApp()
   const { leads } = useLeads()
   const [filter, setFilter] = useState<Channel | 'todos'>('todos')
-  const [aiMode, setAiMode] = useState<'bot' | 'hybrid' | 'agent'>('agent')
+  // Control de IA y Seguridad
+  const [isGlobalAutoReplyEnabled, setIsGlobalAutoReplyEnabled] = useState(false);
+  const [chatControlsMap, setChatControlsMap] = useState<Record<string, { aiMode: AiChatMode; assignedAgentId?: string }>>({});
+  const [savingGlobalSwitch, setSavingGlobalSwitch] = useState(false);
+  const [savingChatControl, setSavingChatControl] = useState(false);
   const [replyChannel, setReplyChannel] = useState<(typeof REPLY_CHANNELS)[number]>('whatsapp')
   const [text, setText] = useState('')
   const [loadingChat, setLoadingChat] = useState(false)
@@ -102,6 +112,101 @@ export default function ConversationsView() {
     source: 'WhatsApp',
   } : null)
   const thread = messages.filter((m) => m.leadId === active?.leadId)
+
+  // Obtener clave única del chat activo para controles de IA
+  const activeChatKey = active?.phone
+    ? active.phone.replace(/\D/g, '')
+    : (active?.leadId || active?.contactId || '');
+  const currentChatControl = activeChatKey ? chatControlsMap[activeChatKey] : null;
+  const currentChatMode: AiChatMode = currentChatControl?.aiMode || 'human';
+
+  // Cargar controles de chats y Switch Maestro desde el servidor
+  const fetchChatControls = async () => {
+    try {
+      const res = await fetch('/api/crm/chat-control');
+      if (res.ok) {
+        const data = await res.json();
+        setIsGlobalAutoReplyEnabled(Boolean(data.isGlobalAutoReplyEnabled));
+        if (Array.isArray(data.controls)) {
+          const map: Record<string, any> = {};
+          data.controls.forEach((c: any) => {
+            map[c.chat_id] = {
+              aiMode: c.ai_mode,
+              assignedAgentId: c.assigned_agent_id,
+            };
+          });
+          setChatControlsMap(map);
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading chat controls:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchChatControls();
+  }, []);
+
+  // Alternar el Switch Maestro Global de Seguridad
+  const handleToggleGlobalSwitch = async () => {
+    setSavingGlobalSwitch(true);
+    const newState = !isGlobalAutoReplyEnabled;
+    try {
+      const res = await fetch('/api/crm/chat-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isGlobalAutoReplyEnabled: newState }),
+      });
+      if (res.ok) {
+        setIsGlobalAutoReplyEnabled(newState);
+      }
+    } catch (e) {
+      console.warn('Error toggling global switch:', e);
+    } finally {
+      setSavingGlobalSwitch(false);
+    }
+  };
+
+  // Cambiar el modo de IA para el chat activo (Agente IA / Híbrido / Humano)
+  const handleSetChatMode = async (mode: AiChatMode) => {
+    if (!activeChatKey) return;
+    setSavingChatControl(true);
+    // Actualización optimista
+    setChatControlsMap(prev => ({
+      ...prev,
+      [activeChatKey]: {
+        ...(prev[activeChatKey] || {}),
+        aiMode: mode,
+      }
+    }));
+    try {
+      await fetch('/api/crm/chat-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: activeChatKey,
+          aiMode: mode,
+        }),
+      });
+    } catch (e) {
+      console.warn('Error updating chat mode:', e);
+    } finally {
+      setSavingChatControl(false);
+    }
+  };
+
+  // Registrar interacción humana para pausar modo híbrido
+  const registerHumanInteraction = () => {
+    if (!activeChatKey) return;
+    fetch('/api/crm/chat-control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId: activeChatKey,
+        isHumanInteraction: true,
+      }),
+    }).catch(() => {});
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -165,7 +270,7 @@ export default function ConversationsView() {
         })
         setPendingFile(null)
         setText('')
-        setAiMode('agent')
+        registerHumanInteraction()
         if (fileInputRef.current) fileInputRef.current.value = ''
         scrollToBottom()
         return
@@ -174,7 +279,7 @@ export default function ConversationsView() {
       if (!text.trim()) return
       sendMessage(lead.id, replyChannel === 'internal' ? 'internal' : replyChannel, text.trim())
       setText('')
-      setAiMode('agent')
+      registerHumanInteraction()
       scrollToBottom()
     } finally {
       setIsSending(false)
@@ -192,7 +297,7 @@ export default function ConversationsView() {
         fileName: `audio_${Date.now()}.ogg`,
         isVoiceNote: true,
       })
-      setAiMode('agent')
+      registerHumanInteraction()
       scrollToBottom()
     } finally {
       setIsSending(false)
@@ -208,7 +313,7 @@ export default function ConversationsView() {
       fileName: media.name,
       caption: media.caption,
     })
-    setAiMode('agent')
+    registerHumanInteraction()
     scrollToBottom()
   }
 
@@ -293,7 +398,55 @@ export default function ConversationsView() {
   }
 
   return (
-    <div className="animate-rise flex h-full overflow-hidden">
+    <div className="animate-rise flex flex-col h-full overflow-hidden">
+      {/* 🛡️ Switch Maestro Global de Seguridad */}
+      <div className={`flex items-center justify-between px-4 py-2 border-b text-xs transition-colors shrink-0 ${
+        isGlobalAutoReplyEnabled
+          ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+          : 'bg-amber-50/90 border-amber-200 text-amber-950'
+      }`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isGlobalAutoReplyEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+          <div className="truncate">
+            {isGlobalAutoReplyEnabled ? (
+              <span>
+                <strong className="text-emerald-900">🚀 Automatización de IA Activa:</strong>
+                <span className="hidden sm:inline text-emerald-800 text-[11px] ml-1.5">
+                  Los chats con 'Agente IA' o 'Híbrido' responderán automáticamente por WhatsApp.
+                </span>
+              </span>
+            ) : (
+              <span>
+                <strong className="text-amber-950">🛡️ Modo Seguro (Respuestas IA Desactivadas Globalmente):</strong>
+                <span className="hidden sm:inline text-amber-900 text-[11px] ml-1.5">
+                  Ninguna IA responderá a tu WhatsApp (protección total para números personales).
+                </span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleToggleGlobalSwitch}
+          disabled={savingGlobalSwitch}
+          className={`px-3 py-1 rounded-lg font-bold text-[11px] transition-all shadow-xs active:scale-95 shrink-0 flex items-center gap-1.5 ${
+            isGlobalAutoReplyEnabled
+              ? 'bg-amber-600 hover:bg-amber-700 text-white'
+              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+          }`}
+        >
+          {savingGlobalSwitch ? (
+            'Guardando...'
+          ) : isGlobalAutoReplyEnabled ? (
+            'Pausar a Modo Seguro'
+          ) : (
+            'Activar Respuestas de IA'
+          )}
+        </button>
+      </div>
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Lista de conversaciones (con los últimos mensajes hasta arriba) */}
       <div className={`${lead ? 'hidden md:flex' : 'flex'} w-full flex-col border-r border-line bg-app md:w-72 lg:w-80`}>
         <div className="px-4 pt-4 pb-2">
@@ -390,13 +543,25 @@ export default function ConversationsView() {
                 </button>
               ))}
             </div>
-            {/* Switch IA */}
-            <div className="flex items-center rounded-lg border border-line p-0.5">
+            {/* Switch IA / Control de Conversación */}
+            <div className="flex items-center rounded-lg border border-line bg-app p-0.5 shadow-xs">
               {AI_MODES.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setAiMode(m.id)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${aiMode === m.id ? m.cls : 'text-ink-soft'}`}
+                  onClick={() => handleSetChatMode(m.id)}
+                  disabled={savingChatControl}
+                  className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                    currentChatMode === m.id
+                      ? m.cls
+                      : 'text-ink-soft hover:bg-soft hover:text-ink font-semibold'
+                  }`}
+                  title={
+                    m.id === 'ai_agent'
+                      ? 'Agente IA responde de forma 100% autónoma'
+                      : m.id === 'hybrid'
+                      ? 'Modo Copiloto: la IA responde hasta que tú intervienes escribiendo'
+                      : 'Atención 100% manual por un humano; la IA nunca responderá'
+                  }
                 >
                   {m.label}
                 </button>
@@ -404,9 +569,48 @@ export default function ConversationsView() {
             </div>
           </div>
 
-          {aiMode === 'bot' && (
-            <div className="flex items-center gap-2 bg-wa-bg px-4 py-1.5 text-xs font-semibold text-wa-text">
-              <Bot size={13} /> Bot respondiendo — si escribes, tomas el control automáticamente
+          {/* Banner de Estado del Chat Activo */}
+          {currentChatMode === 'ai_agent' && !isGlobalAutoReplyEnabled && (
+            <div className="flex items-center justify-between bg-amber-50/95 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-900 animate-fadeIn">
+              <div className="flex items-center gap-1.5">
+                <Bot size={13} className="text-amber-700 shrink-0" />
+                <span>
+                  <strong>🤖 Agente IA asignado:</strong> En pausa porque el <em>Switch Maestro</em> está en Modo Seguro. La IA no enviará respuestas por WhatsApp.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {currentChatMode === 'ai_agent' && isGlobalAutoReplyEnabled && (
+            <div className="flex items-center justify-between bg-emerald-50/95 border-b border-emerald-200 px-4 py-1.5 text-xs text-emerald-900 animate-fadeIn">
+              <div className="flex items-center gap-1.5">
+                <Bot size={13} className="text-emerald-700 shrink-0" />
+                <span>
+                  <strong>🤖 Agente IA activo:</strong> Respondiendo automáticamente con su Segundo Cerebro. Si escribes un mensaje, tomas el control.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {currentChatMode === 'hybrid' && (
+            <div className="flex items-center justify-between bg-amber-50/90 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-900 animate-fadeIn">
+              <div className="flex items-center gap-1.5">
+                <Zap size={13} className="text-amber-600 shrink-0" />
+                <span>
+                  <strong>⚡ Modo Híbrido (Copiloto):</strong> La IA asiste en las respuestas. Si escribes desde tu teclado, la IA se pausa automáticamente.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {currentChatMode === 'human' && (
+            <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200 px-4 py-1 text-[11px] text-slate-600 animate-fadeIn">
+              <div className="flex items-center gap-1.5">
+                <User size={12} className="text-slate-500 shrink-0" />
+                <span>
+                  <strong>👤 Modo Humano:</strong> Atención 100% manual. La IA nunca responderá a este contacto.
+                </span>
+              </div>
             </div>
           )}
 
@@ -591,6 +795,7 @@ export default function ConversationsView() {
           />
         </div>
       )}
+      </div>
     </div>
   )
 }

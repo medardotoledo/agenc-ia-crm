@@ -311,6 +311,76 @@ export async function POST(req: Request) {
 
       const inboundData = await inboundRes.json().catch(() => ({}));
       console.log('[Webhook WA] Inbound message injected into GHL:', inboundData);
+
+      // 7. SEGURIDAD Y EVALUACIÓN DE RESPUESTA DE AGENTE IA
+      try {
+        // A. Verificar Switch Maestro Global
+        const { rows: keyRows } = await pool.query(
+          `SELECT is_global_auto_reply_enabled FROM account_ai_keys 
+           WHERE account_id = $1 OR account_id = 'OS9czz85LUvBeljk8FEv' 
+           ORDER BY CASE WHEN account_id = $1 THEN 1 ELSE 2 END 
+           LIMIT 1;`,
+          [accountId]
+        );
+        const isGlobalEnabled = Boolean(keyRows[0]?.is_global_auto_reply_enabled);
+
+        if (!isGlobalEnabled) {
+          console.log('[Webhook WA] Modo Seguro ACTIVO (Switch Global Desactivado). Ninguna IA responderá por WhatsApp.');
+          return NextResponse.json({
+            success: true,
+            contactId: ghlContactId,
+            message: inboundData,
+            aiAutoReply: false,
+            reason: 'global_safe_mode_off',
+          });
+        }
+
+        // B. Si el Switch Global está ACTIVO, verificar el modo del chat
+        const cleanPhone = rawPhone;
+        const { rows: controlRows } = await pool.query(
+          `SELECT ai_mode, assigned_agent_id, last_human_interaction 
+           FROM crm_chat_controls 
+           WHERE account_id = $1 AND (chat_id = $2 OR chat_id = $3)
+           LIMIT 1;`,
+          [accountId, cleanPhone, ghlContactId]
+        );
+
+        // Si no está registrado o está en 'human', NO responder
+        const chatMode = controlRows[0]?.ai_mode || 'human';
+
+        if (chatMode === 'human') {
+          console.log('[Webhook WA] Chat en modo Humano. No se dispara respuesta de IA.');
+          return NextResponse.json({
+            success: true,
+            contactId: ghlContactId,
+            message: inboundData,
+            aiAutoReply: false,
+            reason: 'chat_mode_is_human',
+          });
+        }
+
+        if (chatMode === 'hybrid') {
+          const lastHuman = controlRows[0]?.last_human_interaction;
+          if (lastHuman) {
+            const diffMinutes = (Date.now() - new Date(lastHuman).getTime()) / (1000 * 60);
+            if (diffMinutes < 30) {
+              console.log(`[Webhook WA] Modo Híbrido pausado (humano intervino hace ${diffMinutes.toFixed(1)} min).`);
+              return NextResponse.json({
+                success: true,
+                contactId: ghlContactId,
+                message: inboundData,
+                aiAutoReply: false,
+                reason: 'hybrid_human_override',
+              });
+            }
+          }
+        }
+
+        console.log(`[Webhook WA] Contacto califica para respuesta de IA (modo: ${chatMode}).`);
+      } catch (aiErr: any) {
+        console.warn('[Webhook WA] Error evaluando automatización de IA:', aiErr.message);
+      }
+
       return NextResponse.json({ success: true, contactId: ghlContactId, message: inboundData });
     }
 
