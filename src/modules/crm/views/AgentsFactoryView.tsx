@@ -132,6 +132,17 @@ export default function AgentsFactoryView() {
   const [selectedProduct, setSelectedProduct] = useState<ProductData | null>(null);
   const [productStudyFiles, setProductStudyFiles] = useState<KnowledgeFile[]>([]);
   const [productShareableFiles, setProductShareableFiles] = useState<KnowledgeFile[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<{
+    active: boolean;
+    folder: 'material_estudio' | 'material_compartible';
+    current: number;
+    total: number;
+    fileName: string;
+    percent: number;
+  } | null>(null);
+  const [copiedSheet, setCopiedSheet] = useState(false);
+  const [synthesisError, setSynthesisError] = useState<string | null>(null);
+  const [synthesisSuccess, setSynthesisSuccess] = useState<string | null>(null);
 
   // Cerebro global y simulaciones
   const [brainDocs, setBrainDocs] = useState<BrainDoc[]>([]);
@@ -335,7 +346,7 @@ export default function AgentsFactoryView() {
     }
   };
 
-  // Subir archivo a un producto
+  // Subir archivo a un producto con barra de progreso
   const handleUploadToProduct = async (
     folder: 'material_estudio' | 'material_compartible',
     files: FileList | null
@@ -343,9 +354,26 @@ export default function AgentsFactoryView() {
     if (!files || files.length === 0 || !selectedAgentId || !selectedProductId) return;
     setActionLoading(true);
     setError(null);
+    setUploadProgress({
+      active: true,
+      folder,
+      current: 0,
+      total: files.length,
+      fileName: files[0].name,
+      percent: 0,
+    });
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        setUploadProgress({
+          active: true,
+          folder,
+          current: i + 1,
+          total: files.length,
+          fileName: file.name,
+          percent: Math.round((i / files.length) * 100),
+        });
+
         const reader = new FileReader();
 
         await new Promise<void>((resolve, reject) => {
@@ -364,7 +392,18 @@ export default function AgentsFactoryView() {
                   productId: selectedProductId,
                 }),
               });
-              if (!res.ok) throw new Error('Fallo al subir archivo');
+              if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'Fallo al subir archivo');
+              }
+              setUploadProgress({
+                active: true,
+                folder,
+                current: i + 1,
+                total: files.length,
+                fileName: file.name,
+                percent: Math.round(((i + 1) / files.length) * 100),
+              });
               resolve();
             } catch (e) {
               reject(e);
@@ -375,15 +414,37 @@ export default function AgentsFactoryView() {
         });
       }
 
-      setSuccessMsg('Archivo guardado correctamente en el producto.');
+      setSuccessMsg(`¡${files.length} archivo(s) guardado(s) exitosamente!`);
       await fetchProductDetail(selectedAgentId, selectedProductId);
       await fetchProducts(selectedAgentId);
     } catch (err: any) {
       setError(err.message);
     } finally {
+      setUploadProgress(null);
       setActionLoading(false);
       setTimeout(() => setSuccessMsg(null), 4000);
     }
+  };
+
+  // Descargar Ficha de Conocimiento en archivo .md
+  const handleDownloadKnowledgeSheet = () => {
+    if (!selectedProduct?.knowledge_sheet) return;
+    const blob = new Blob([selectedProduct.knowledge_sheet], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${selectedProduct.slug || 'producto'}-ficha-conocimiento.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Copiar Ficha de Conocimiento
+  const handleCopyKnowledgeSheet = () => {
+    if (!selectedProduct?.knowledge_sheet) return;
+    navigator.clipboard.writeText(selectedProduct.knowledge_sheet);
+    setCopiedSheet(true);
+    setTimeout(() => setCopiedSheet(false), 3000);
   };
 
   // Sintetizar Ficha de Conocimiento del Producto
@@ -391,6 +452,8 @@ export default function AgentsFactoryView() {
     if (!selectedAgentId || !selectedProductId) return;
     setSynthesizingProduct(true);
     setError(null);
+    setSynthesisError(null);
+    setSynthesisSuccess(null);
     try {
       const res = await fetch('/api/agents/' + selectedAgentId + '/products/' + selectedProductId + '/digest', {
         method: 'POST',
@@ -398,14 +461,19 @@ export default function AgentsFactoryView() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al sintetizar ficha');
 
+      setSynthesisSuccess('¡Ficha de Conocimiento sintetizada y estructurada para la IA con éxito!');
       setSuccessMsg('Ficha de Conocimiento sintetizada y estructurada para la IA.');
       await fetchProductDetail(selectedAgentId, selectedProductId);
       await fetchProducts(selectedAgentId);
     } catch (err: any) {
+      setSynthesisError(err.message);
       setError(err.message);
     } finally {
       setSynthesizingProduct(false);
-      setTimeout(() => setSuccessMsg(null), 4000);
+      setTimeout(() => {
+        setSuccessMsg(null);
+        setSynthesisSuccess(null);
+      }, 5000);
     }
   };
 
@@ -1056,9 +1124,24 @@ export default function AgentsFactoryView() {
                               )}
                             </div>
 
+                            {uploadProgress && uploadProgress.folder === 'material_estudio' && (
+                              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-1.5 animate-pulse">
+                                <div className="flex justify-between text-xs font-semibold text-amber-900">
+                                  <span className="truncate">Subiendo ({uploadProgress.current}/{uploadProgress.total}): {uploadProgress.fileName}</span>
+                                  <span>{uploadProgress.percent}%</span>
+                                </div>
+                                <div className="w-full bg-amber-200 rounded-full h-2 overflow-hidden">
+                                  <div
+                                    className="bg-amber-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${uploadProgress.percent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
                             <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-amber-300 hover:bg-amber-50 text-slate-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
                               <UploadCloud className="w-4 h-4 text-amber-700" />
-                              <span>Subir Documentos Internos (PDF / Word)</span>
+                              <span>Subir Documentos Internos (PDF / Word / Markdown)</span>
                               <input
                                 type="file"
                                 multiple
@@ -1135,6 +1218,21 @@ export default function AgentsFactoryView() {
                               )}
                             </div>
 
+                            {uploadProgress && uploadProgress.folder === 'material_compartible' && (
+                              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 space-y-1.5 animate-pulse">
+                                <div className="flex justify-between text-xs font-semibold text-emerald-900">
+                                  <span className="truncate">Subiendo ({uploadProgress.current}/{uploadProgress.total}): {uploadProgress.fileName}</span>
+                                  <span>{uploadProgress.percent}%</span>
+                                </div>
+                                <div className="w-full bg-emerald-200 rounded-full h-2 overflow-hidden">
+                                  <div
+                                    className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${uploadProgress.percent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
                             <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer transition-all shadow-sm">
                               <UploadCloud className="w-4 h-4 text-white" />
                               <span>Subir Archivos para WhatsApp (Videos / Fotos / PDF)</span>
@@ -1171,14 +1269,72 @@ export default function AgentsFactoryView() {
                               </button>
                             </div>
 
+                            {/* Status mientras sintetiza */}
+                            {synthesizingProduct && (
+                              <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-950 flex items-start gap-3 animate-pulse">
+                                <RotateCw className="w-5 h-5 text-indigo-600 animate-spin shrink-0 mt-0.5" />
+                                <div className="space-y-1 text-xs">
+                                  <p className="font-bold text-indigo-900">🧠 Sintetizando Ficha de Conocimiento con IA...</p>
+                                  <p className="text-indigo-700">
+                                    Analizando documentos de estudio internos y destilando directrices técnicas, objeciones y disparadores de venta. Esto suele tomar de 10 a 25 segundos.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Alertas locales de Zona 3 */}
+                            {synthesisError && (
+                              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                                  <span>{synthesisError}</span>
+                                </div>
+                                <button onClick={() => setSynthesisError(null)} className="font-bold underline hover:text-rose-950">
+                                  Descartar
+                                </button>
+                              </div>
+                            )}
+                            {synthesisSuccess && (
+                              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 shadow-sm">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>{synthesisSuccess}</span>
+                              </div>
+                            )}
+
                             {selectedProduct?.knowledge_sheet ? (
-                              <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text">
-                                {selectedProduct.knowledge_sheet}
+                              <div className="space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5 w-fit">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    Ficha lista y memorizada por la IA
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={handleCopyKnowledgeSheet}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all shadow-sm active:scale-95"
+                                    >
+                                      {copiedSheet ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                      <span>{copiedSheet ? '¡Copiado!' : 'Copiar Ficha'}</span>
+                                    </button>
+                                    <button
+                                      onClick={handleDownloadKnowledgeSheet}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold transition-all shadow-sm active:scale-95"
+                                    >
+                                      <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                                      <span>Descargar Ficha (.md)</span>
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="bg-slate-900 text-slate-100 rounded-xl p-4 font-mono text-xs max-h-96 overflow-y-auto whitespace-pre-wrap leading-relaxed select-text border border-slate-800">
+                                  {selectedProduct.knowledge_sheet}
+                                </div>
                               </div>
                             ) : (
-                              <div className="py-8 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                                La Ficha de Conocimiento aún no ha sido destilada. Haz clic en el botón <strong>&quot;⚡ Sintetizar Ficha de Conocimiento&quot;</strong> para que la IA procese los datos de este producto.
-                              </div>
+                              !synthesizingProduct && (
+                                <div className="py-8 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                  La Ficha de Conocimiento aún no ha sido destilada. Haz clic en el botón <strong>&quot;⚡ Sintetizar Ficha de Conocimiento&quot;</strong> para que la IA procese los datos de este producto.
+                                </div>
+                              )
                             )}
                           </div>
                         </div>

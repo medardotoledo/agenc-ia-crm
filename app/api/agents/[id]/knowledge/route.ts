@@ -72,6 +72,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let cdnUrl = fileUrl || '';
     let storageUrl = fileUrl || '';
 
+    // Extraer texto si es documento de estudio (.md, .txt, .json, .csv, .xml, etc.)
+    let extractedText = contentText || '';
+    if (!extractedText && fileBase64) {
+      try {
+        const cleanB64 = fileBase64.includes(';base64,') ? fileBase64.split(';base64,')[1] : fileBase64;
+        const ext = (fileName.split('.').pop() || '').toLowerCase();
+        if (['md', 'txt', 'csv', 'json', 'xml', 'html', 'yaml', 'yml', 'tsv'].includes(ext)) {
+          extractedText = Buffer.from(cleanB64, 'base64').toString('utf-8');
+        }
+      } catch (textErr: any) {
+        console.warn('[Knowledge Upload] Error extracting text:', textErr.message);
+      }
+    }
+
     // Si es material compartible y viene en base64, subirlo a GoHighLevel CDN para que tenga URL pública permanente
     if (folder === 'material_compartible' && fileBase64 && !cdnUrl.startsWith('http')) {
       try {
@@ -122,7 +136,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       fileSize,
       storageUrl || 'local_storage',
       cdnUrl || null,
-      contentText || '',
+      extractedText || '',
       triggerRule || null,
       suggestedCaption || null,
       productId || null,
