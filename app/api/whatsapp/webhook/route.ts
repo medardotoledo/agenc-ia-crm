@@ -436,7 +436,8 @@ REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
 1. Responde de forma muy concisa, natural y humana (máximo 1 a 3 oraciones cortas).
 2. NUNCA digas que eres una IA, un bot o un asistente virtual. Eres una persona de carne y hueso del equipo.
 3. No uses listas con viñetas ni respuestas largas o enciclopédicas.
-4. Termina tu respuesta con una pregunta natural, breve y cordial para continuar la conversación.`;
+4. Termina tu respuesta con una pregunta natural, breve y cordial para continuar la conversación.
+5. Responde ÚNICAMENTE con el mensaje final directo para el cliente. NUNCA incluyas notas de razonamiento, validaciones ni confirmaciones internas.`;
 
         // 5. Generar respuesta con Gemini
         const geminiApiKey = accountKeys.gemini_key || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -444,11 +445,10 @@ REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
 
         if (geminiApiKey) {
           const candidateModels = [
-            agent.llm_model || 'gemini-3.6-flash',
-            'gemini-3.6-flash',
-            'gemini-3.5-flash',
             'gemini-flash-latest',
-            'gemini-3.7-flash',
+            agent.llm_model || 'gemini-3.6-flash',
+            'gemini-3.5-flash',
+            'gemini-3.6-flash',
           ];
           const modelsToTry = Array.from(new Set(candidateModels));
           for (const mName of modelsToTry) {
@@ -458,23 +458,31 @@ REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                  systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                  },
                   contents: [
                     {
                       role: 'user',
-                      parts: [{ text: `${systemPrompt}\n\nEl cliente te acaba de escribir este mensaje por WhatsApp:\n"${textContent}"\n\nResponde directamente al cliente:` }]
+                      parts: [{ text: textContent }]
                     }
                   ],
                   generationConfig: {
                     temperature: 0.7,
-                    maxOutputTokens: 300,
+                    maxOutputTokens: 600,
                   }
                 }),
               });
 
               if (geminiRes.ok) {
                 const geminiData = await geminiRes.json();
-                aiReplyText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-                if (aiReplyText) break;
+                const parts = geminiData?.candidates?.[0]?.content?.parts || [];
+                const textParts = parts.filter((p: any) => !p.thought && p.text);
+                const rawGenerated = textParts.length > 0 ? textParts.map((p: any) => p.text).join('\n') : (parts[0]?.text || '');
+                if (rawGenerated) {
+                  aiReplyText = rawGenerated.trim();
+                  break;
+                }
               } else {
                 console.warn(`[Webhook WA] Gemini ${mName} status:`, geminiRes.status);
               }
@@ -489,8 +497,11 @@ REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
           return NextResponse.json({ success: true, contactId: ghlContactId, aiAutoReply: false, reason: 'llm_failed' });
         }
 
-        // Limpiar formato innecesario para WhatsApp
+        // Limpiar formato innecesario o artefactos de pensamiento
         aiReplyText = aiReplyText
+          .replace(/^Check against constraints:[\s\S]*?(?=\n\n|$)/i, '')
+          .replace(/^Thinking Process:[\s\S]*?(?=\n\n|$)/i, '')
+          .replace(/^Thought:[\s\S]*?(?=\n\n|$)/i, '')
           .replace(/^"|"$/g, '')
           .replace(new RegExp(`^(${agent.name}|Asesor|Asistente):\\s*`, 'i'), '')
           .trim();
