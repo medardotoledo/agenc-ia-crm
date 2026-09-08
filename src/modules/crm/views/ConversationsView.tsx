@@ -68,6 +68,7 @@ export default function ConversationsView() {
   const [chatControlsMap, setChatControlsMap] = useState<Record<string, { aiMode: AiChatMode; assignedAgentId?: string }>>({});
   const [savingGlobalSwitch, setSavingGlobalSwitch] = useState(false);
   const [savingChatControl, setSavingChatControl] = useState(false);
+  const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; role: string; status: string; mission_type: string }>>([]);
   const [replyChannel, setReplyChannel] = useState<(typeof REPLY_CHANNELS)[number]>('whatsapp')
   const [text, setText] = useState('')
   const [loadingChat, setLoadingChat] = useState(false)
@@ -89,21 +90,33 @@ export default function ConversationsView() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Ordenar conversaciones para que los últimos mensajes SIEMPRE aparezcan hasta arriba (estilo WhatsApp) y filtrar por búsqueda
+  // Ordenar conversaciones para que los últimos mensajes SIEMPRE aparezcan hasta arriba (estilo WhatsApp) y filtrar por búsqueda en vivo
   const convos = conversations
     .filter((c) => filter === 'todos' || c.channel === filter)
     .filter((c) => {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
-      const l = leads.find((x) => x.id === c.leadId || x.contactId === c.leadId);
-      const name = (c.contactName || l?.name || '').toLowerCase();
-      const phone = (c.phone || l?.phone || '').toLowerCase();
-      const preview = (c.preview || '').toLowerCase();
-      return name.includes(q) || phone.includes(q) || preview.includes(q);
+      const cleanDigits = q.replace(/\D/g, '');
+      const l = leads.find((x) => x.id === c.leadId || x.contactId === c.leadId || x.id === c.contactId);
+      const name = String(c.contactName || l?.name || '').toLowerCase();
+      const rawPhone = String(c.phone || l?.phone || '').toLowerCase();
+      const phoneDigits = rawPhone.replace(/\D/g, '');
+      const preview = String(c.preview || '').toLowerCase();
+      
+      const matchesName = name.includes(q);
+      const matchesRawPhone = rawPhone.includes(q);
+      const matchesDigits = cleanDigits.length >= 2 && phoneDigits.includes(cleanDigits);
+      const matchesPreview = preview.includes(q);
+      
+      return matchesName || matchesRawPhone || matchesDigits || matchesPreview;
     })
     .sort((a, b) => (b.lastMessageDate || 0) - (a.lastMessageDate || 0))
 
-  const active = conversations.find((c) => c.leadId === activeConversationId) ?? convos[0]
+  // Si hay una búsqueda activa y el seleccionado no está en la lista filtrada, enfocar el primer resultado
+  const matchedActive = conversations.find((c) => c.leadId === activeConversationId);
+  const active = (searchQuery.trim() && convos.length > 0 && (!matchedActive || !convos.some(c => c.leadId === matchedActive.leadId)))
+    ? convos[0]
+    : (matchedActive ?? convos[0]);
   const matchedLead = leads.find((l) => l.id === active?.leadId || l.contactId === active?.leadId)
   const lead = matchedLead || (active ? {
     id: active.leadId,
@@ -130,6 +143,8 @@ export default function ConversationsView() {
     : (active?.leadId || active?.contactId || '');
   const currentChatControl = activeChatKey ? chatControlsMap[activeChatKey] : null;
   const currentChatMode: AiChatMode = currentChatControl?.aiMode || 'human';
+  const assignedAgent = availableAgents.find(a => a.id === currentChatControl?.assignedAgentId);
+  const agentDisplayName = assignedAgent ? `Agente ${assignedAgent.name}` : 'Agente IA';
 
   // Cargar controles de chats y Switch Maestro desde el servidor
   const fetchChatControls = async () => {
@@ -138,6 +153,9 @@ export default function ConversationsView() {
       if (res.ok) {
         const data = await res.json();
         setIsGlobalAutoReplyEnabled(Boolean(data.isGlobalAutoReplyEnabled));
+        if (Array.isArray(data.availableAgents)) {
+          setAvailableAgents(data.availableAgents);
+        }
         if (Array.isArray(data.controls)) {
           const map: Record<string, any> = {};
           data.controls.forEach((c: any) => {
@@ -175,6 +193,31 @@ export default function ConversationsView() {
       console.warn('Error toggling global switch:', e);
     } finally {
       setSavingGlobalSwitch(false);
+    }
+  };
+
+  // Asignar un Agente de IA específico (Sofía, Daniel, etc.) al contacto activo
+  const handleSetAssignedAgent = async (agentId: string) => {
+    if (!activeChatKey) return;
+    setChatControlsMap(prev => ({
+      ...prev,
+      [activeChatKey]: {
+        ...(prev[activeChatKey] || { aiMode: 'human' }),
+        assignedAgentId: agentId || undefined,
+      }
+    }));
+    try {
+      await fetch('/api/crm/chat-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: activeChatKey,
+          aiMode: currentChatMode,
+          assignedAgentId: agentId || null,
+        }),
+      });
+    } catch (e) {
+      console.warn('Error assigning agent:', e);
     }
   };
 
@@ -475,6 +518,14 @@ export default function ConversationsView() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (convos.length > 0) {
+                    setActiveConversation(convos[0].leadId);
+                  }
+                }
+              }}
               placeholder="Buscar contacto, teléfono..."
               className="w-full rounded-xl border border-line bg-soft/60 pl-8 pr-7 py-1.5 text-xs text-ink outline-none transition focus:border-primary focus:bg-app shadow-inner"
             />
@@ -591,29 +642,51 @@ export default function ConversationsView() {
                 </button>
               ))}
             </div>
-            {/* Switch IA / Control de Conversación */}
-            <div className="flex items-center rounded-lg border border-line bg-app p-0.5 shadow-xs">
-              {AI_MODES.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => handleSetChatMode(m.id)}
-                  disabled={savingChatControl}
-                  className={`rounded-md px-2.5 py-1 text-xs transition-all ${
-                    currentChatMode === m.id
-                      ? m.cls
-                      : 'text-ink-soft hover:bg-soft hover:text-ink font-semibold'
-                  }`}
-                  title={
-                    m.id === 'ai_agent'
-                      ? 'Agente IA responde de forma 100% autónoma'
-                      : m.id === 'hybrid'
-                      ? 'Modo Copiloto: la IA responde hasta que tú intervienes escribiendo'
-                      : 'Atención 100% manual por un humano; la IA nunca responderá'
-                  }
-                >
-                  {m.label}
-                </button>
-              ))}
+            {/* Switch IA / Control de Conversación y Asignación de Agente */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-lg border border-line bg-app p-0.5 shadow-xs">
+                {AI_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => handleSetChatMode(m.id)}
+                    disabled={savingChatControl}
+                    className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                      currentChatMode === m.id
+                        ? m.cls
+                        : 'text-ink-soft hover:bg-soft hover:text-ink font-semibold'
+                    }`}
+                    title={
+                      m.id === 'ai_agent'
+                        ? 'Agente IA responde de forma 100% autónoma'
+                        : m.id === 'hybrid'
+                        ? 'Modo Copiloto: la IA responde hasta que tú intervienes escribiendo'
+                        : 'Atención 100% manual por un humano; la IA nunca responderá'
+                    }
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Selector de Agente específico (Sofía, Daniel, etc.) */}
+              {(currentChatMode === 'ai_agent' || currentChatMode === 'hybrid') && (
+                <div className="hidden sm:flex items-center gap-1.5 animate-fadeIn">
+                  <select
+                    value={currentChatControl?.assignedAgentId || ''}
+                    onChange={(e) => handleSetAssignedAgent(e.target.value)}
+                    disabled={savingChatControl}
+                    className="rounded-lg border border-line bg-app px-2 py-1 text-xs font-bold text-ink outline-none focus:border-primary shadow-xs"
+                    title="Seleccionar cuál agente de IA atenderá a este contacto"
+                  >
+                    <option value="">🤖 Automático (Primer Agente)</option>
+                    {availableAgents.map((ag) => (
+                      <option key={ag.id} value={ag.id}>
+                        🤖 {ag.name} ({ag.role || ag.mission_type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
@@ -623,7 +696,7 @@ export default function ConversationsView() {
               <div className="flex items-center gap-1.5">
                 <Bot size={13} className="text-amber-700 shrink-0" />
                 <span>
-                  <strong>🤖 Agente IA asignado:</strong> En pausa porque el <em>Switch Maestro</em> está en Modo Seguro. La IA no enviará respuestas por WhatsApp.
+                  <strong>🤖 {agentDisplayName} asignado:</strong> En pausa porque el <em>Switch Maestro</em> está en Modo Seguro. La IA no enviará respuestas por WhatsApp.
                 </span>
               </div>
             </div>
@@ -634,7 +707,7 @@ export default function ConversationsView() {
               <div className="flex items-center gap-1.5">
                 <Bot size={13} className="text-emerald-700 shrink-0" />
                 <span>
-                  <strong>🤖 Agente IA activo:</strong> Respondiendo automáticamente con su Segundo Cerebro. Si escribes un mensaje, tomas el control.
+                  <strong>🤖 {agentDisplayName} activo:</strong> Respondiendo automáticamente con su Segundo Cerebro. Si escribes un mensaje, tomas el control.
                 </span>
               </div>
             </div>

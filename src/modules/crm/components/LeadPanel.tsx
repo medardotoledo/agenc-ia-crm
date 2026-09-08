@@ -27,8 +27,24 @@ const PLACEHOLDER: Record<NoteType, string> = {
 const FIELD = 'w-full rounded-lg border border-line bg-app p-2.5 text-sm outline-none focus:border-primary-light'
 const LABEL = 'mb-1 block text-xs font-semibold text-ink-soft'
 
-/* Editor de datos del lead — guarda al salir del campo (igual que la vista Excel) */
-function ProfileTab({ lead }: { lead: Lead }) {
+/* Editor de datos del lead — guarda al salir del campo */
+function ProfileTab({
+  lead,
+  leadChatMode,
+  handleSetLeadMode,
+  leadAssignedAgentId,
+  handleSetLeadAgent,
+  availableAgents,
+  savingMode,
+}: {
+  lead: Lead;
+  leadChatMode: 'ai_agent' | 'hybrid' | 'human';
+  handleSetLeadMode: (m: 'ai_agent' | 'hybrid' | 'human') => Promise<void>;
+  leadAssignedAgentId?: string;
+  handleSetLeadAgent: (agId: string) => Promise<void>;
+  availableAgents: Array<{ id: string; name: string; role: string; mission_type: string }>;
+  savingMode: boolean;
+}) {
   const { updateLead } = useLeads()
   const stageLabels = useApp((s) => s.stageLabels)
   const save = (k: keyof Lead) => (e: React.FocusEvent<HTMLInputElement> | React.ChangeEvent<HTMLSelectElement>) => {
@@ -85,6 +101,67 @@ function ProfileTab({ lead }: { lead: Lead }) {
         <label className={LABEL}>Etiquetas</label>
         <TagEditor lead={lead} />
       </div>
+
+      {/* 🤖 Agente de IA y Automatización WhatsApp */}
+      <div className="rounded-xl border border-line bg-soft/40 p-3.5 space-y-3 shadow-xs">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bot className="w-4 h-4 text-emerald-600" />
+            <h4 className="text-xs font-bold text-ink">Agente de IA y Automatización</h4>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+            WhatsApp
+          </span>
+        </div>
+
+        {/* Modo de Atención */}
+        <div className="space-y-1.5">
+          <label className={LABEL}>Modo de Atención para este Prospecto</label>
+          <div className="flex rounded-lg border border-line bg-app p-0.5 shadow-xs">
+            {[
+              { id: 'ai_agent' as const, label: '🤖 Agente IA', cls: 'bg-emerald-600 text-white font-bold shadow-xs' },
+              { id: 'hybrid' as const, label: '⚡ Híbrido', cls: 'bg-amber-500 text-white font-bold shadow-xs' },
+              { id: 'human' as const, label: '👤 Humano', cls: 'bg-slate-700 text-white font-bold shadow-xs' },
+            ].map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => handleSetLeadMode(m.id)}
+                disabled={savingMode}
+                className={`flex-1 rounded-md py-1.5 text-xs transition-all ${
+                  leadChatMode === m.id ? m.cls : 'text-ink-soft hover:bg-soft'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Asignar Agente específico (Sofía, Daniel, etc.) */}
+        {(leadChatMode === 'ai_agent' || leadChatMode === 'hybrid') && (
+          <div className="space-y-1.5 animate-fadeIn">
+            <label className={LABEL}>¿Cuál Agente de IA atenderá a este contacto?</label>
+            <select
+              value={leadAssignedAgentId || ''}
+              onChange={(e) => handleSetLeadAgent(e.target.value)}
+              disabled={savingMode}
+              className={FIELD}
+            >
+              <option value="">🤖 Automático (Primer Agente Activo)</option>
+              {availableAgents.map((ag) => (
+                <option key={ag.id} value={ag.id}>
+                  🤖 {ag.name} — {ag.role || ag.mission_type}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-ink-soft">
+              Al asignar a un agente específico, ese bot responderá con su Segundo Cerebro y personalidad al WhatsApp de este prospecto.
+            </p>
+          </div>
+        )}
+      </div>
+
       <p className="pt-2 text-center text-xs text-ink-soft">Los cambios se guardan automáticamente al salir de cada campo ✓</p>
     </div>
   )
@@ -277,6 +354,8 @@ export default function LeadPanel() {
   const [isExpanded, setIsExpanded] = useState(false)
   const [loadingChat, setLoadingChat] = useState(false)
   const [leadChatMode, setLeadChatMode] = useState<'ai_agent' | 'hybrid' | 'human'>('human')
+  const [leadAssignedAgentId, setLeadAssignedAgentId] = useState<string | undefined>(undefined)
+  const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; role: string; mission_type: string }>>([])
   const [savingMode, setSavingMode] = useState(false)
   const [isGlobalEnabled, setIsGlobalEnabled] = useState(false)
 
@@ -298,20 +377,27 @@ export default function LeadPanel() {
 
   // Clave única del contacto para el control de IA
   const chatKey = lead?.phone ? lead.phone.replace(/\D/g, '') : (lead?.contactId || lead?.id || '');
+  const assignedLeadAgent = availableAgents.find(a => a.id === leadAssignedAgentId);
+  const leadAgentDisplayName = assignedLeadAgent ? `Agente ${assignedLeadAgent.name}` : 'Agente IA';
 
   // Cargar modo de IA para este lead desde el servidor
   useEffect(() => {
-    if (lead && panelTab === 'chat' && chatKey) {
+    if (lead && chatKey) {
       fetch('/api/crm/chat-control')
         .then((res) => res.json())
         .then((data) => {
           if (data.success) {
             setIsGlobalEnabled(Boolean(data.isGlobalAutoReplyEnabled));
+            if (Array.isArray(data.availableAgents)) {
+              setAvailableAgents(data.availableAgents);
+            }
             const found = data.controls?.find((c: any) => c.chat_id === chatKey);
             if (found?.ai_mode) {
               setLeadChatMode(found.ai_mode);
+              setLeadAssignedAgentId(found.assigned_agent_id || undefined);
             } else {
               setLeadChatMode('human');
+              setLeadAssignedAgentId(undefined);
             }
           }
         })
@@ -331,10 +417,33 @@ export default function LeadPanel() {
         body: JSON.stringify({
           chatId: chatKey,
           aiMode: mode,
+          assignedAgentId: leadAssignedAgentId || null,
         }),
       });
     } catch (e) {
       console.warn('Error updating lead chat mode:', e);
+    } finally {
+      setSavingMode(false);
+    }
+  };
+
+  // Asignar agente específico a este lead
+  const handleSetLeadAgent = async (agentId: string) => {
+    if (!chatKey) return;
+    setSavingMode(true);
+    setLeadAssignedAgentId(agentId || undefined);
+    try {
+      await fetch('/api/crm/chat-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: chatKey,
+          aiMode: leadChatMode,
+          assignedAgentId: agentId || null,
+        }),
+      });
+    } catch (e) {
+      console.warn('Error assigning agent to lead:', e);
     } finally {
       setSavingMode(false);
     }
@@ -556,7 +665,15 @@ export default function LeadPanel() {
         </div>
 
         {panelTab === 'perfil' ? (
-          <ProfileTab lead={lead} />
+          <ProfileTab
+            lead={lead}
+            leadChatMode={leadChatMode}
+            handleSetLeadMode={handleSetLeadMode}
+            leadAssignedAgentId={leadAssignedAgentId}
+            handleSetLeadAgent={handleSetLeadAgent}
+            availableAgents={availableAgents}
+            savingMode={savingMode}
+          />
         ) : panelTab === 'citas' ? (
           <CitasTab lead={lead} />
         ) : panelTab === 'notas' ? (
@@ -624,33 +741,52 @@ export default function LeadPanel() {
                   <span className="text-[11px] font-bold text-ink truncate">WhatsApp</span>
                 </div>
 
-                {/* Selector de Modo por Lead [ 🤖 Agente IA | ⚡ Híbrido | 👤 Humano ] */}
-                <div className="flex items-center rounded-lg border border-line bg-app p-0.5 shadow-xs shrink-0">
-                  {[
-                    { id: 'ai_agent' as const, label: '🤖 Agente IA', cls: 'bg-emerald-600 text-white font-bold shadow-xs' },
-                    { id: 'hybrid' as const, label: '⚡ Híbrido', cls: 'bg-amber-500 text-white font-bold shadow-xs' },
-                    { id: 'human' as const, label: '👤 Humano', cls: 'bg-slate-700 text-white font-bold shadow-xs' },
-                  ].map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => handleSetLeadMode(m.id)}
+                {/* Selector de Modo por Lead y Asignación de Agente */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center rounded-lg border border-line bg-app p-0.5 shadow-xs">
+                    {[
+                      { id: 'ai_agent' as const, label: '🤖 Agente IA', cls: 'bg-emerald-600 text-white font-bold shadow-xs' },
+                      { id: 'hybrid' as const, label: '⚡ Híbrido', cls: 'bg-amber-500 text-white font-bold shadow-xs' },
+                      { id: 'human' as const, label: '👤 Humano', cls: 'bg-slate-700 text-white font-bold shadow-xs' },
+                    ].map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => handleSetLeadMode(m.id)}
+                        disabled={savingMode}
+                        className={`rounded-md px-2 py-0.5 text-[10px] sm:text-[11px] transition-all ${
+                          leadChatMode === m.id
+                            ? m.cls
+                            : 'text-ink-soft hover:bg-soft hover:text-ink font-semibold'
+                        }`}
+                        title={
+                          m.id === 'ai_agent'
+                            ? 'Agente IA responde de forma 100% autónoma'
+                            : m.id === 'hybrid'
+                            ? 'Modo Copiloto: la IA responde hasta que tú intervienes escribiendo'
+                            : 'Atención 100% manual por un humano; la IA nunca responderá'
+                        }
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {(leadChatMode === 'ai_agent' || leadChatMode === 'hybrid') && (
+                    <select
+                      value={leadAssignedAgentId || ''}
+                      onChange={(e) => handleSetLeadAgent(e.target.value)}
                       disabled={savingMode}
-                      className={`rounded-md px-2 py-0.5 text-[10px] sm:text-[11px] transition-all ${
-                        leadChatMode === m.id
-                          ? m.cls
-                          : 'text-ink-soft hover:bg-soft hover:text-ink font-semibold'
-                      }`}
-                      title={
-                        m.id === 'ai_agent'
-                          ? 'Agente IA responde de forma 100% autónoma'
-                          : m.id === 'hybrid'
-                          ? 'Modo Copiloto: la IA responde hasta que tú intervienes escribiendo'
-                          : 'Atención 100% manual por un humano; la IA nunca responderá'
-                      }
+                      className="hidden sm:inline-block rounded-lg border border-line bg-app px-1.5 py-0.5 text-[10px] font-bold text-ink outline-none focus:border-primary shadow-xs"
+                      title="Seleccionar cuál Agente de IA atenderá a este contacto"
                     >
-                      {m.label}
-                    </button>
-                  ))}
+                      <option value="">🤖 Automático</option>
+                      {availableAgents.map((ag) => (
+                        <option key={ag.id} value={ag.id}>
+                          🤖 {ag.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -680,13 +816,13 @@ export default function LeadPanel() {
               {leadChatMode === 'ai_agent' && !isGlobalEnabled && (
                 <div className="flex items-center gap-1.5 bg-amber-50 border-t border-amber-200 px-3.5 sm:px-5 py-1 text-[11px] text-amber-900 animate-fadeIn">
                   <Bot size={12} className="text-amber-700 shrink-0" />
-                  <span className="truncate"><strong>🤖 Agente IA:</strong> En pausa (Switch Global en Modo Seguro).</span>
+                  <span className="truncate"><strong>🤖 {leadAgentDisplayName}:</strong> En pausa (Switch Global en Modo Seguro).</span>
                 </div>
               )}
               {leadChatMode === 'ai_agent' && isGlobalEnabled && (
                 <div className="flex items-center gap-1.5 bg-emerald-50 border-t border-emerald-200 px-3.5 sm:px-5 py-1 text-[11px] text-emerald-900 animate-fadeIn">
                   <Bot size={12} className="text-emerald-700 shrink-0" />
-                  <span className="truncate"><strong>🤖 Agente IA activo:</strong> Respondiendo automáticamente.</span>
+                  <span className="truncate"><strong>🤖 {leadAgentDisplayName} activo:</strong> Respondiendo automáticamente con su Segundo Cerebro.</span>
                 </div>
               )}
               {leadChatMode === 'hybrid' && (
