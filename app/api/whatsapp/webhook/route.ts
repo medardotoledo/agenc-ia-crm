@@ -413,44 +413,102 @@ export async function POST(req: Request) {
         const agent = agentRows[0];
         console.log(`[Webhook WA] Generando respuesta con agente: "${agent.name}" (${agent.role})...`);
 
-        // 2. Obtener Segundo Cerebro del agente
-        const { rows: brainDocs } = await pool.query(
+        // 2. Obtener Segundo Cerebro del agente (con fallback a la cuenta si no tiene)
+        let { rows: brainDocs } = await pool.query(
           'SELECT title, markdown_content FROM ai_agent_brains WHERE agent_id = $1 ORDER BY file_slug ASC;',
           [agent.id]
         );
+
+        if (!brainDocs.length) {
+          const { rows: fallbackBrains } = await pool.query(
+            `SELECT title, markdown_content FROM ai_agent_brains 
+             WHERE agent_id IN (SELECT id FROM ai_agents WHERE account_id = $1 OR account_id = 'OS9czz85LUvBeljk8FEv') 
+             ORDER BY file_slug ASC;`,
+            [accountId]
+          );
+          brainDocs = fallbackBrains;
+        }
         const brainContext = brainDocs.map((b: any) => `### ${b.title}\n${b.markdown_content}`).join('\n\n');
 
-        // 3. Obtener personalidad (ia_soul)
-        const iaSoul = typeof agent.ia_soul === 'string' ? JSON.parse(agent.ia_soul) : (agent.ia_soul || {});
-        const soulRules = iaSoul.custom_rules || 'Habla como una asesora cercana, empática, profesional y educada.';
+        // Obtener fichas de productos
+        const { rows: productRows } = await pool.query(
+          `SELECT name, short_description, knowledge_sheet, target_triggers, price_range 
+           FROM ai_agent_products 
+           WHERE agent_id = $1 OR agent_id IN (SELECT id FROM ai_agents WHERE account_id = $2 OR account_id = 'OS9czz85LUvBeljk8FEv') 
+           ORDER BY display_order ASC;`,
+          [agent.id, accountId]
+        );
+        const productContext = productRows.map((p: any) => `### PRODUCTO: ${p.name}
+Descripción: ${p.short_description || ''}
+Rango de Precio: ${p.price_range || 'Consultar promoción activa'}
+Gatillos / Disparadores: ${p.target_triggers || ''}
+Ficha de Conocimiento:
+${p.knowledge_sheet || ''}`).join('\n\n');
 
-        // 4. Construir System Prompt
-        const systemPrompt = `Eres ${agent.name}, ${agent.role || 'Setter Comercial y Asesora'}.
+        // 3. Obtener historial reciente de la conversación (últimos mensajes)
+        let recentChatHistory = '';
+        if (inboundData?.conversationId) {
+          try {
+            const histRes = await fetch(
+              `https://services.leadconnectorhq.com/conversations/${inboundData.conversationId}/messages?limit=5`,
+              { headers: ghlHeaders }
+            );
+            if (histRes.ok) {
+              const histData = await histRes.json();
+              const histMsgs = (histData?.messages?.messages || []).reverse();
+              if (histMsgs.length > 0) {
+                recentChatHistory = histMsgs
+                  .map((m: any) => `${m.direction === 'inbound' ? 'Cliente' : agent.name}: ${m.body || m.message || ''}`)
+                  .join('\n');
+              }
+            }
+          } catch (hErr: any) {
+            console.warn('[Webhook WA] Error obteniendo historial:', hErr.message);
+          }
+        }
+
+        // 4. Obtener personalidad (ia_soul)
+        const iaSoul = typeof agent.ia_soul === 'string' ? JSON.parse(agent.ia_soul) : (agent.ia_soul || {});
+        const soulRules = iaSoul.custom_rules || 'Habla como una asesora cercana, empática, profesional y educada. Usa emojis amigables y tono humano.';
+
+        // 5. Construir System Prompt con el Segundo Cerebro y Guardrails Inmutables
+        const systemPrompt = `Eres ${agent.name}, ${agent.role || 'Setter Comercial y Consultora en Salud Metabólica'}.
 Directrices de Personalidad y Estilo:
 ${soulRules}
 ${agent.system_instructions ? `\nInstrucciones específicas del negocio:\n${agent.system_instructions}` : ''}
 
-${brainContext ? `=== SEGUNDO CEREBRO (CONOCIMIENTO OFICIAL) ===\n${brainContext}\n` : ''}
+=== PRODUCTOS OFICIALES DE LA EMPRESA ===
+${productContext || 'Producto estrella: PHIX (Modulador del Nervio Vago para activación natural de GLP-1 endógeno).'}
 
-REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
-1. Responde de forma muy concisa, natural y humana (máximo 1 a 3 oraciones cortas).
-2. NUNCA digas que eres una IA, un bot o un asistente virtual. Eres una persona de carne y hueso del equipo.
-3. No uses listas con viñetas ni respuestas largas o enciclopédicas.
-4. Termina tu respuesta con una pregunta natural, breve y cordial para continuar la conversación.
-5. Responde ÚNICAMENTE con el mensaje final directo para el cliente. NUNCA incluyas notas de razonamiento, validaciones ni confirmaciones internas.`;
+=== SEGUNDO CEREBRO (CONOCIMIENTO CIENTÍFICO Y ESTRATEGIA DE CONVERSIÓN) ===
+${brainContext}
 
-        // 5. Generar respuesta con Gemini
+REGLAS DE ORO Y GUARDRAILS INMUTABLES (OBLIGATORIAS):
+1. TU ÚNICA SOLUCIÓN Y RESPALDO ES EL PRODUCTO PHIX Y SU BIOTECNOLOGÍA.
+2. NUNCA des consejos genéricos de nutrición ("ajustar tu alimentación", "hacer dieta", "hacer ejercicio", "ir al médico"). El cliente acude a ti por la biotecnología avanzada de PHIX.
+3. Cuando el cliente hable de grasa visceral, sobrepeso, antojos o energía, fundamenta tu respuesta en el MECANISMO ÚNICO DE PHIX: El Eje Nervio Vago estimulado por Ácidos Amargos del Lúpulo, que activa la producción natural de GLP-1 en el cuerpo sin inyecciones ni fármacos sintéticos.
+4. Aplica la Fórmula Híbrida: [Validación empática] + [Mecanismo Único de PHIX] + [Pregunta de calificación o micro-compromiso].
+5. Longitud para WhatsApp: Respuestas concisas, cálidas y directas (máximo 2 a 3 oraciones cortas por mensaje). No abrumes con textos gigantes ni listas.
+6. NUNCA digas que eres una IA, un bot o un asistente virtual. Eres una persona de carne y hueso del equipo.
+7. Responde ÚNICAMENTE con el mensaje final directo para enviar al cliente. NUNCA incluyas pensamientos, notas de verificación ni confirmaciones internas.`;
+
+        // 6. Generar respuesta con Gemini
         const geminiApiKey = accountKeys.gemini_key || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
         let aiReplyText = '';
 
         if (geminiApiKey) {
           const candidateModels = [
-            'gemini-flash-latest',
             agent.llm_model || 'gemini-3.6-flash',
-            'gemini-3.5-flash',
             'gemini-3.6-flash',
+            'gemini-3.5-flash',
+            'gemini-flash-latest',
           ];
           const modelsToTry = Array.from(new Set(candidateModels));
+
+          const userTurnText = recentChatHistory
+            ? `Historial reciente de la conversación:\n${recentChatHistory}\n\nResponde al último mensaje del cliente ("${textContent}") usando estrictamente tu Segundo Cerebro:`
+            : textContent;
+
           for (const mName of modelsToTry) {
             try {
               const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${geminiApiKey}`;
@@ -464,12 +522,12 @@ REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
                   contents: [
                     {
                       role: 'user',
-                      parts: [{ text: textContent }]
+                      parts: [{ text: userTurnText }]
                     }
                   ],
                   generationConfig: {
                     temperature: 0.7,
-                    maxOutputTokens: 600,
+                    maxOutputTokens: 1200,
                   }
                 }),
               });
