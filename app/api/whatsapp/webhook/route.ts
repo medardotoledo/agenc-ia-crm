@@ -314,29 +314,9 @@ export async function POST(req: Request) {
 
       // 7. SEGURIDAD Y EVALUACIÓN DE RESPUESTA DE AGENTE IA
       try {
-        // A. Verificar Switch Maestro Global
-        const { rows: keyRows } = await pool.query(
-          `SELECT is_global_auto_reply_enabled FROM account_ai_keys 
-           WHERE account_id = $1 OR account_id = 'OS9czz85LUvBeljk8FEv' 
-           ORDER BY CASE WHEN account_id = $1 THEN 1 ELSE 2 END 
-           LIMIT 1;`,
-          [accountId]
-        );
-        const isGlobalEnabled = Boolean(keyRows[0]?.is_global_auto_reply_enabled);
-
-        if (!isGlobalEnabled) {
-          console.log('[Webhook WA] Modo Seguro ACTIVO (Switch Global Desactivado). Ninguna IA responderá por WhatsApp.');
-          return NextResponse.json({
-            success: true,
-            contactId: ghlContactId,
-            message: inboundData,
-            aiAutoReply: false,
-            reason: 'global_safe_mode_off',
-          });
-        }
-
-        // B. Si el Switch Global está ACTIVO, verificar el modo del chat
         const cleanPhone = rawPhone;
+
+        // A. Consultar control específico de este chat
         const { rows: controlRows } = await pool.query(
           `SELECT ai_mode, assigned_agent_id, last_human_interaction 
            FROM crm_chat_controls 
@@ -345,40 +325,238 @@ export async function POST(req: Request) {
           [accountId, cleanPhone, ghlContactId]
         );
 
-        // Si no está registrado o está en 'human', NO responder
-        const chatMode = controlRows[0]?.ai_mode || 'human';
+        const chatControl = controlRows[0];
+        const chatMode = chatControl?.ai_mode;
+
+        // B. Consultar Switch Maestro Global de Seguridad
+        const { rows: keyRows } = await pool.query(
+          `SELECT is_global_auto_reply_enabled, gemini_key, openai_key, anthropic_key FROM account_ai_keys 
+           WHERE account_id = $1 OR account_id = 'OS9czz85LUvBeljk8FEv' OR account_id = 'default'
+           ORDER BY CASE WHEN account_id = $1 THEN 1 WHEN account_id = 'OS9czz85LUvBeljk8FEv' THEN 2 ELSE 3 END 
+           LIMIT 1;`,
+          [accountId]
+        );
+        const accountKeys = keyRows[0] || {};
+        const isGlobalEnabled = Boolean(accountKeys.is_global_auto_reply_enabled);
+
+        // C. Determinar si califica para respuesta automática:
+        // - Si está en 'human': NUNCA responder (control manual del usuario)
+        // - Si está en 'ai_agent': SIEMPRE responder (whitelist / excepción explícita que protege el teléfono personal)
+        // - Si está en 'hybrid': responder salvo si hubo intervención humana en los últimos 30 min
+        // - Si no tiene registro (nuevo/desconocido): responder solo si isGlobalEnabled está activo
+        let shouldReply = false;
+        let replyReason = '';
+        const assignedAgentId = chatControl?.assigned_agent_id;
 
         if (chatMode === 'human') {
-          console.log('[Webhook WA] Chat en modo Humano. No se dispara respuesta de IA.');
+          shouldReply = false;
+          replyReason = 'chat_mode_is_human';
+          console.log('[Webhook WA] Chat en modo Humano explícito. No se dispara respuesta de IA.');
+        } else if (chatMode === 'ai_agent') {
+          shouldReply = true;
+          replyReason = 'explicit_ai_agent_whitelist';
+          console.log(`[Webhook WA] Excepción activa: Chat asignado explícitamente a Agente IA. Procediendo a responder (Global Switch: ${isGlobalEnabled ? 'ON' : 'OFF - Modo Seguro Personal'}).`);
+        } else if (chatMode === 'hybrid') {
+          const lastHuman = chatControl?.last_human_interaction;
+          if (lastHuman) {
+            const diffMinutes = (Date.now() - new Date(lastHuman).getTime()) / (1000 * 60);
+            if (diffMinutes < 30) {
+              shouldReply = false;
+              replyReason = 'hybrid_human_override';
+              console.log(`[Webhook WA] Modo Híbrido pausado (humano intervino hace ${diffMinutes.toFixed(1)} min).`);
+            } else {
+              shouldReply = true;
+              replyReason = 'hybrid_active';
+            }
+          } else {
+            shouldReply = true;
+            replyReason = 'hybrid_active';
+          }
+        } else {
+          // Chat sin configuración específica
+          if (isGlobalEnabled) {
+            shouldReply = true;
+            replyReason = 'global_auto_reply_enabled';
+            console.log('[Webhook WA] Switch Global ACTIVO. Chat entrante califica para respuesta por defecto.');
+          } else {
+            shouldReply = false;
+            replyReason = 'personal_safe_mode_default_human';
+            console.log('[Webhook WA] Modo Seguro ACTIVO (Teléfono Personal). Sin asignación previa a IA, chat personal ignorado.');
+          }
+        }
+
+        if (!shouldReply) {
           return NextResponse.json({
             success: true,
             contactId: ghlContactId,
             message: inboundData,
             aiAutoReply: false,
-            reason: 'chat_mode_is_human',
+            reason: replyReason,
           });
         }
 
-        if (chatMode === 'hybrid') {
-          const lastHuman = controlRows[0]?.last_human_interaction;
-          if (lastHuman) {
-            const diffMinutes = (Date.now() - new Date(lastHuman).getTime()) / (1000 * 60);
-            if (diffMinutes < 30) {
-              console.log(`[Webhook WA] Modo Híbrido pausado (humano intervino hace ${diffMinutes.toFixed(1)} min).`);
-              return NextResponse.json({
-                success: true,
-                contactId: ghlContactId,
-                message: inboundData,
-                aiAutoReply: false,
-                reason: 'hybrid_human_override',
+        // D. GENERAR Y ENVIAR RESPUESTA DEL AGENTE DE IA
+        // 1. Obtener datos del agente (el asignado o el primer agente activo)
+        const { rows: agentRows } = await pool.query(
+          `SELECT * FROM ai_agents 
+           WHERE (id = $1 OR account_id = $2 OR account_id = 'OS9czz85LUvBeljk8FEv') 
+           ORDER BY CASE WHEN id = $1 THEN 1 WHEN account_id = $2 THEN 2 ELSE 3 END, created_at ASC 
+           LIMIT 1;`,
+          [assignedAgentId || '00000000-0000-0000-0000-000000000000', accountId]
+        );
+
+        if (!agentRows.length) {
+          console.warn('[Webhook WA] No se encontró ningún agente activo para responder.');
+          return NextResponse.json({ success: true, contactId: ghlContactId, aiAutoReply: false, reason: 'no_agent_found' });
+        }
+
+        const agent = agentRows[0];
+        console.log(`[Webhook WA] Generando respuesta con agente: "${agent.name}" (${agent.role})...`);
+
+        // 2. Obtener Segundo Cerebro del agente
+        const { rows: brainDocs } = await pool.query(
+          'SELECT title, markdown_content FROM ai_agent_brains WHERE agent_id = $1 ORDER BY file_slug ASC;',
+          [agent.id]
+        );
+        const brainContext = brainDocs.map((b: any) => `### ${b.title}\n${b.markdown_content}`).join('\n\n');
+
+        // 3. Obtener personalidad (ia_soul)
+        const iaSoul = typeof agent.ia_soul === 'string' ? JSON.parse(agent.ia_soul) : (agent.ia_soul || {});
+        const soulRules = iaSoul.custom_rules || 'Habla como una asesora cercana, empática, profesional y educada.';
+
+        // 4. Construir System Prompt
+        const systemPrompt = `Eres ${agent.name}, ${agent.role || 'Setter Comercial y Asesora'}.
+Directrices de Personalidad y Estilo:
+${soulRules}
+${agent.system_instructions ? `\nInstrucciones específicas del negocio:\n${agent.system_instructions}` : ''}
+
+${brainContext ? `=== SEGUNDO CEREBRO (CONOCIMIENTO OFICIAL) ===\n${brainContext}\n` : ''}
+
+REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
+1. Responde de forma muy concisa, natural y humana (máximo 1 a 3 oraciones cortas).
+2. NUNCA digas que eres una IA, un bot o un asistente virtual. Eres una persona de carne y hueso del equipo.
+3. No uses listas con viñetas ni respuestas largas o enciclopédicas.
+4. Termina tu respuesta con una pregunta natural, breve y cordial para continuar la conversación.`;
+
+        // 5. Generar respuesta con Gemini
+        const geminiApiKey = accountKeys.gemini_key || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        let aiReplyText = '';
+
+        if (geminiApiKey) {
+          const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+          for (const mName of modelsToTry) {
+            try {
+              const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${geminiApiKey}`;
+              const geminiRes = await fetch(geminiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      role: 'user',
+                      parts: [{ text: `${systemPrompt}\n\nEl cliente te acaba de escribir este mensaje por WhatsApp:\n"${textContent}"\n\nResponde directamente al cliente:` }]
+                    }
+                  ],
+                  generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 300,
+                  }
+                }),
               });
+
+              if (geminiRes.ok) {
+                const geminiData = await geminiRes.json();
+                aiReplyText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+                if (aiReplyText) break;
+              } else {
+                console.warn(`[Webhook WA] Gemini ${mName} status:`, geminiRes.status);
+              }
+            } catch (llmErr: any) {
+              console.warn(`[Webhook WA] Error calling ${mName}:`, llmErr.message);
             }
           }
         }
 
-        console.log(`[Webhook WA] Contacto califica para respuesta de IA (modo: ${chatMode}).`);
+        if (!aiReplyText) {
+          console.warn('[Webhook WA] No se pudo generar respuesta de IA (falló Gemini o no hay API key).');
+          return NextResponse.json({ success: true, contactId: ghlContactId, aiAutoReply: false, reason: 'llm_failed' });
+        }
+
+        // Limpiar formato innecesario para WhatsApp
+        aiReplyText = aiReplyText
+          .replace(/^"|"$/g, '')
+          .replace(new RegExp(`^(${agent.name}|Asesor|Asistente):\\s*`, 'i'), '')
+          .trim();
+
+        console.log(`[Webhook WA] Respuesta de ${agent.name} generada con éxito: "${aiReplyText.slice(0, 80)}..."`);
+
+        // 6. Enviar respuesta por WhatsApp vía Evolution API
+        const waInstance = instance || `sub_${accountId}`;
+        const evoUrls = [
+          process.env.EVOLUTION_API_URL || 'http://localhost:8080',
+          'http://2.24.65.127:8085',
+          'http://evolution-api:8080',
+          'http://localhost:8085',
+          'http://host.docker.internal:8085',
+          'http://172.17.0.1:8085',
+        ];
+        const evoKey = process.env.EVOLUTION_API_KEY || 'agencia_secret_wa_key_2026';
+
+        let sentOk = false;
+        for (const evoUrl of evoUrls) {
+          try {
+            const evoRes = await fetch(`${evoUrl}/message/sendText/${waInstance}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: evoKey,
+              },
+              body: JSON.stringify({
+                number: cleanPhone,
+                text: aiReplyText,
+                delay: 1500,
+                presence: 'composing',
+              }),
+            });
+
+            if (evoRes.ok) {
+              sentOk = true;
+              console.log(`[Webhook WA] Mensaje de ${agent.name} enviado con éxito vía Evolution API (${evoUrl}).`);
+              break;
+            }
+          } catch {
+            // probar siguiente url
+          }
+        }
+
+        // 7. Sincronizar mensaje saliente en GoHighLevel para el CRM
+        if (ghlContactId) {
+          try {
+            await fetch('https://services.leadconnectorhq.com/conversations/messages', {
+              method: 'POST',
+              headers: ghlHeaders,
+              body: JSON.stringify({
+                type: 'Live_Chat',
+                contactId: ghlContactId,
+                message: aiReplyText,
+              }),
+            });
+            console.log('[Webhook WA] Mensaje de IA sincronizado en GHL con éxito.');
+          } catch (ghlErr: any) {
+            console.warn('[Webhook WA] Error sincronizando en GHL:', ghlErr.message);
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          contactId: ghlContactId,
+          aiAutoReply: true,
+          agentName: agent.name,
+          sent: sentOk,
+          message: aiReplyText,
+        });
       } catch (aiErr: any) {
-        console.warn('[Webhook WA] Error evaluando automatización de IA:', aiErr.message);
+        console.warn('[Webhook WA] Error en proceso de respuesta automática de IA:', aiErr.message);
       }
 
       return NextResponse.json({ success: true, contactId: ghlContactId, message: inboundData });

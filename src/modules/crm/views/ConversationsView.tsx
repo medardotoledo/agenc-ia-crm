@@ -453,8 +453,8 @@ export default function ConversationsView() {
 
   return (
     <div className="animate-rise flex flex-col h-full overflow-hidden">
-      {/* 🛡️ Switch Maestro Global de Seguridad */}
-      <div className={`flex items-center justify-between px-4 py-2 border-b text-xs transition-colors shrink-0 ${
+      {/* Barra de Switch Maestro de Automatización IA */}
+      <div className={`border-b px-4 py-2 flex items-center justify-between gap-3 text-xs transition-colors ${
         isGlobalAutoReplyEnabled
           ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
           : 'bg-amber-50/90 border-amber-200 text-amber-950'
@@ -464,16 +464,16 @@ export default function ConversationsView() {
           <div className="truncate">
             {isGlobalAutoReplyEnabled ? (
               <span>
-                <strong className="text-emerald-900">🚀 Automatización de IA Activa:</strong>
+                <strong className="text-emerald-900">🚀 Piloto Automático General Activo:</strong>
                 <span className="hidden sm:inline text-emerald-800 text-[11px] ml-1.5">
-                  Los chats con 'Agente IA' o 'Híbrido' responderán automáticamente por WhatsApp.
+                  Los agentes responderán automáticamente a todos los prospectos nuevos.
                 </span>
               </span>
             ) : (
               <span>
-                <strong className="text-amber-950">🛡️ Modo Seguro (Respuestas IA Desactivadas Globalmente):</strong>
+                <strong className="text-amber-950">🛡️ Modo Seguro (Teléfono Personal Protegido):</strong>
                 <span className="hidden sm:inline text-amber-900 text-[11px] ml-1.5">
-                  Ninguna IA responderá a tu WhatsApp (protección total para números personales).
+                  Solo responderán los chats asignados expresamente a "Agente IA". Tus chats personales (familia, amigos) nunca recibirán respuestas.
                 </span>
               </span>
             )}
@@ -495,7 +495,7 @@ export default function ConversationsView() {
           ) : isGlobalAutoReplyEnabled ? (
             'Pausar a Modo Seguro'
           ) : (
-            'Activar Respuestas de IA'
+            'Activar Piloto Automático'
           )}
         </button>
       </div>
@@ -692,13 +692,16 @@ export default function ConversationsView() {
 
           {/* Banner de Estado del Chat Activo */}
           {currentChatMode === 'ai_agent' && !isGlobalAutoReplyEnabled && (
-            <div className="flex items-center justify-between bg-amber-50/95 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-900 animate-fadeIn">
-              <div className="flex items-center gap-1.5">
-                <Bot size={13} className="text-amber-700 shrink-0" />
-                <span>
-                  <strong>🤖 {agentDisplayName} asignado:</strong> En pausa porque el <em>Switch Maestro</em> está en Modo Seguro. La IA no enviará respuestas por WhatsApp.
+            <div className="flex items-center justify-between bg-emerald-50/95 border-b border-emerald-200 px-4 py-1.5 text-xs text-emerald-900 animate-fadeIn">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Bot size={13} className="text-emerald-700 shrink-0" />
+                <span className="truncate">
+                  <strong>🤖 {agentDisplayName} activa:</strong> Respondiendo a este contacto (Excepción activa en Modo Seguro). Tus chats personales siguen 100% protegidos.
                 </span>
               </div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full shrink-0 ml-2">
+                🎯 Chat Autorizado
+              </span>
             </div>
           )}
 
@@ -707,9 +710,12 @@ export default function ConversationsView() {
               <div className="flex items-center gap-1.5">
                 <Bot size={13} className="text-emerald-700 shrink-0" />
                 <span>
-                  <strong>🤖 {agentDisplayName} activo:</strong> Respondiendo automáticamente con su Segundo Cerebro. Si escribes un mensaje, tomas el control.
+                  <strong>🤖 {agentDisplayName} activa:</strong> Respondiendo automáticamente con su Segundo Cerebro. Si escribes un mensaje, tomas el control.
                 </span>
               </div>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full shrink-0 ml-2">
+                🚀 En Vivo
+              </span>
             </div>
           )}
 

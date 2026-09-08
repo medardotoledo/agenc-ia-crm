@@ -814,15 +814,20 @@ export default function LeadPanel() {
 
               {/* Banners informativos según el modo */}
               {leadChatMode === 'ai_agent' && !isGlobalEnabled && (
-                <div className="flex items-center gap-1.5 bg-amber-50 border-t border-amber-200 px-3.5 sm:px-5 py-1 text-[11px] text-amber-900 animate-fadeIn">
-                  <Bot size={12} className="text-amber-700 shrink-0" />
-                  <span className="truncate"><strong>🤖 {leadAgentDisplayName}:</strong> En pausa (Switch Global en Modo Seguro).</span>
+                <div className="flex items-center justify-between bg-emerald-50 border-t border-emerald-200 px-3.5 sm:px-5 py-1 text-[11px] text-emerald-900 animate-fadeIn">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Bot size={12} className="text-emerald-700 shrink-0" />
+                    <span className="truncate"><strong>🤖 {leadAgentDisplayName} activa:</strong> Respondiendo a este contacto (Excepción activa en Modo Seguro).</span>
+                  </div>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 py-0.2 rounded-full shrink-0 ml-1">
+                    Autorizado
+                  </span>
                 </div>
               )}
               {leadChatMode === 'ai_agent' && isGlobalEnabled && (
                 <div className="flex items-center gap-1.5 bg-emerald-50 border-t border-emerald-200 px-3.5 sm:px-5 py-1 text-[11px] text-emerald-900 animate-fadeIn">
                   <Bot size={12} className="text-emerald-700 shrink-0" />
-                  <span className="truncate"><strong>🤖 {leadAgentDisplayName} activo:</strong> Respondiendo automáticamente con su Segundo Cerebro.</span>
+                  <span className="truncate"><strong>🤖 {leadAgentDisplayName} activa:</strong> Respondiendo automáticamente con su Segundo Cerebro.</span>
                 </div>
               )}
               {leadChatMode === 'hybrid' && (
