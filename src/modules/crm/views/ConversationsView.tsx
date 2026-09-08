@@ -20,7 +20,8 @@ import {
   Zap,
   Shield,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Search
 } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, ChannelDot, CHANNEL_LABEL } from '@/modules/crm/components/ui'
@@ -61,6 +62,7 @@ export default function ConversationsView() {
   } = useApp()
   const { leads } = useLeads()
   const [filter, setFilter] = useState<Channel | 'todos'>('todos')
+  const [searchQuery, setSearchQuery] = useState('')
   // Control de IA y Seguridad
   const [isGlobalAutoReplyEnabled, setIsGlobalAutoReplyEnabled] = useState(false);
   const [chatControlsMap, setChatControlsMap] = useState<Record<string, { aiMode: AiChatMode; assignedAgentId?: string }>>({});
@@ -87,9 +89,18 @@ export default function ConversationsView() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Ordenar conversaciones para que los últimos mensajes SIEMPRE aparezcan hasta arriba (estilo WhatsApp)
+  // Ordenar conversaciones para que los últimos mensajes SIEMPRE aparezcan hasta arriba (estilo WhatsApp) y filtrar por búsqueda
   const convos = conversations
     .filter((c) => filter === 'todos' || c.channel === filter)
+    .filter((c) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      const l = leads.find((x) => x.id === c.leadId || x.contactId === c.leadId);
+      const name = (c.contactName || l?.name || '').toLowerCase();
+      const phone = (c.phone || l?.phone || '').toLowerCase();
+      const preview = (c.preview || '').toLowerCase();
+      return name.includes(q) || phone.includes(q) || preview.includes(q);
+    })
     .sort((a, b) => (b.lastMessageDate || 0) - (a.lastMessageDate || 0))
 
   const active = conversations.find((c) => c.leadId === activeConversationId) ?? convos[0]
@@ -450,12 +461,35 @@ export default function ConversationsView() {
       {/* Lista de conversaciones (con los últimos mensajes hasta arriba) */}
       <div className={`${lead ? 'hidden md:flex' : 'flex'} w-full flex-col border-r border-line bg-app md:w-72 lg:w-80`}>
         <div className="px-4 pt-4 pb-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h1 className="font-bold">Conversaciones</h1>
+          <div className="mb-2.5 flex items-center justify-between">
+            <h1 className="font-bold text-sm sm:text-base">Conversaciones</h1>
             <span className="rounded-full bg-wa-bg px-2 py-0.5 text-[10px] font-bold text-wa-text">
-              {convos.length} chats
+              {convos.length} {convos.length === 1 ? 'chat' : 'chats'}
             </span>
           </div>
+
+          {/* Buscador de contactos en vivo */}
+          <div className="relative mb-2.5">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-soft pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar contacto, teléfono..."
+              className="w-full rounded-xl border border-line bg-soft/60 pl-8 pr-7 py-1.5 text-xs text-ink outline-none transition focus:border-primary focus:bg-app shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-soft hover:text-ink text-xs font-bold px-1 rounded"
+                title="Borrar búsqueda"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
           <div className="flex flex-wrap gap-1.5">
             {FILTERS.map((f) => (
               <button
@@ -472,6 +506,20 @@ export default function ConversationsView() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
+          {convos.length === 0 && (
+            <div className="py-10 text-center text-xs text-ink-soft px-4 space-y-1">
+              <p className="font-bold text-ink">Sin contactos</p>
+              {searchQuery ? (
+                <p className="text-[11px] text-ink-soft">
+                  No se encontraron resultados para &ldquo;{searchQuery}&rdquo;.
+                </p>
+              ) : (
+                <p className="text-[11px] text-ink-soft">
+                  No hay chats en este filtro.
+                </p>
+              )}
+            </div>
+          )}
           {convos.map((c) => {
             const l = leads.find((x) => x.id === c.leadId || x.contactId === c.leadId)
             const name = c.contactName || l?.name || 'Contacto WhatsApp'

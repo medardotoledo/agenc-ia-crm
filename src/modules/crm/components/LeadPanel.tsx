@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check, Maximize2, Minimize2, RefreshCw, Paperclip, Folder, LayoutTemplate, FileText, Film, Image as ImageIcon, ExternalLink } from 'lucide-react'
+import { X, Phone, Mail, MessageCircle, StickyNote, Send, UserRound, Calendar, Clock, Video, Plus, Check, Maximize2, Minimize2, RefreshCw, Paperclip, Folder, LayoutTemplate, FileText, Film, Image as ImageIcon, ExternalLink, Bot, Zap, User } from 'lucide-react'
 import { useApp, useLeads } from '@/store/useApp'
 import { Avatar, StageSelect, CHANNEL_LABEL } from './ui'
 import { TagEditor } from './TagEditor'
@@ -276,6 +276,9 @@ export default function LeadPanel() {
   const [chatText, setChatText] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const [loadingChat, setLoadingChat] = useState(false)
+  const [leadChatMode, setLeadChatMode] = useState<'ai_agent' | 'hybrid' | 'human'>('human')
+  const [savingMode, setSavingMode] = useState(false)
+  const [isGlobalEnabled, setIsGlobalEnabled] = useState(false)
 
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false)
@@ -292,6 +295,63 @@ export default function LeadPanel() {
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
 
   const lead = leads.find((l) => l.id === selectedLeadId)
+
+  // Clave única del contacto para el control de IA
+  const chatKey = lead?.phone ? lead.phone.replace(/\D/g, '') : (lead?.contactId || lead?.id || '');
+
+  // Cargar modo de IA para este lead desde el servidor
+  useEffect(() => {
+    if (lead && panelTab === 'chat' && chatKey) {
+      fetch('/api/crm/chat-control')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            setIsGlobalEnabled(Boolean(data.isGlobalAutoReplyEnabled));
+            const found = data.controls?.find((c: any) => c.chat_id === chatKey);
+            if (found?.ai_mode) {
+              setLeadChatMode(found.ai_mode);
+            } else {
+              setLeadChatMode('human');
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [lead?.id, panelTab, chatKey]);
+
+  // Cambiar modo de IA para este lead
+  const handleSetLeadMode = async (mode: 'ai_agent' | 'hybrid' | 'human') => {
+    if (!chatKey) return;
+    setSavingMode(true);
+    setLeadChatMode(mode);
+    try {
+      await fetch('/api/crm/chat-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: chatKey,
+          aiMode: mode,
+        }),
+      });
+    } catch (e) {
+      console.warn('Error updating lead chat mode:', e);
+    } finally {
+      setSavingMode(false);
+    }
+  };
+
+  // Registrar interacción humana para pausar modo híbrido
+  const registerHumanInteraction = () => {
+    if (!chatKey) return;
+    fetch('/api/crm/chat-control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId: chatKey,
+        isHumanInteraction: true,
+      }),
+    }).catch(() => {});
+  };
 
   const scrollToBottom = () => {
     chatMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -373,6 +433,7 @@ export default function LeadPanel() {
       if (!chatText.trim()) return
       sendMessage(lead.id, lead.channels[0] ?? 'whatsapp', chatText.trim())
       setChatText('')
+      registerHumanInteraction()
       scrollToBottom()
     } finally {
       setIsSending(false)
@@ -389,6 +450,7 @@ export default function LeadPanel() {
         fileName: `audio_${Date.now()}.ogg`,
         isVoiceNote: true,
       })
+      registerHumanInteraction()
       scrollToBottom()
     } finally {
       setIsSending(false)
@@ -554,35 +616,91 @@ export default function LeadPanel() {
           </>
         ) : (
           <>
-            {/* Header de estado WhatsApp */}
-            <div className="flex items-center justify-between border-b border-line px-5 py-2 bg-soft/30">
-              <div className="flex items-center gap-2">
-                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[11px] font-semibold text-ink-soft">WhatsApp en vivo</span>
+            {/* Header de estado WhatsApp y Control IA/Humano */}
+            <div className="flex flex-col border-b border-line bg-app">
+              <div className="flex items-center justify-between px-3.5 sm:px-5 py-2 bg-soft/30 gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="text-[11px] font-bold text-ink truncate">WhatsApp</span>
+                </div>
+
+                {/* Selector de Modo por Lead [ 🤖 Agente IA | ⚡ Híbrido | 👤 Humano ] */}
+                <div className="flex items-center rounded-lg border border-line bg-app p-0.5 shadow-xs shrink-0">
+                  {[
+                    { id: 'ai_agent' as const, label: '🤖 Agente IA', cls: 'bg-emerald-600 text-white font-bold shadow-xs' },
+                    { id: 'hybrid' as const, label: '⚡ Híbrido', cls: 'bg-amber-500 text-white font-bold shadow-xs' },
+                    { id: 'human' as const, label: '👤 Humano', cls: 'bg-slate-700 text-white font-bold shadow-xs' },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => handleSetLeadMode(m.id)}
+                      disabled={savingMode}
+                      className={`rounded-md px-2 py-0.5 text-[10px] sm:text-[11px] transition-all ${
+                        leadChatMode === m.id
+                          ? m.cls
+                          : 'text-ink-soft hover:bg-soft hover:text-ink font-semibold'
+                      }`}
+                      title={
+                        m.id === 'ai_agent'
+                          ? 'Agente IA responde de forma 100% autónoma'
+                          : m.id === 'hybrid'
+                          ? 'Modo Copiloto: la IA responde hasta que tú intervienes escribiendo'
+                          : 'Atención 100% manual por un humano; la IA nunca responderá'
+                      }
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => openWhatsApp(lead.phone)}
+                    className="flex items-center gap-1 text-[11px] text-ink-soft hover:text-primary transition p-1 rounded"
+                    title="Abrir en WhatsApp Web externo"
+                  >
+                    <ExternalLink size={12} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (lead) {
+                        setLoadingChat(true);
+                        loadLeadMessages(lead.id, lead.contactId).finally(() => setLoadingChat(false));
+                      }
+                    }}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline p-1 rounded"
+                    title="Actualizar mensajes"
+                  >
+                    <RefreshCw size={11} className={loadingChat ? 'animate-spin' : ''} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => openWhatsApp(lead.phone)}
-                  className="flex items-center gap-1 text-[11px] text-ink-soft hover:text-primary transition"
-                  title="Abrir en WhatsApp Web externo"
-                >
-                  <ExternalLink size={11} />
-                  <span>Web</span>
-                </button>
-                <button
-                  onClick={() => {
-                    if (lead) {
-                      setLoadingChat(true);
-                      loadLeadMessages(lead.id, lead.contactId).finally(() => setLoadingChat(false));
-                    }
-                  }}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                  title="Actualizar mensajes"
-                >
-                  <RefreshCw size={11} className={loadingChat ? 'animate-spin' : ''} />
-                  Actualizar
-                </button>
-              </div>
+
+              {/* Banners informativos según el modo */}
+              {leadChatMode === 'ai_agent' && !isGlobalEnabled && (
+                <div className="flex items-center gap-1.5 bg-amber-50 border-t border-amber-200 px-3.5 sm:px-5 py-1 text-[11px] text-amber-900 animate-fadeIn">
+                  <Bot size={12} className="text-amber-700 shrink-0" />
+                  <span className="truncate"><strong>🤖 Agente IA:</strong> En pausa (Switch Global en Modo Seguro).</span>
+                </div>
+              )}
+              {leadChatMode === 'ai_agent' && isGlobalEnabled && (
+                <div className="flex items-center gap-1.5 bg-emerald-50 border-t border-emerald-200 px-3.5 sm:px-5 py-1 text-[11px] text-emerald-900 animate-fadeIn">
+                  <Bot size={12} className="text-emerald-700 shrink-0" />
+                  <span className="truncate"><strong>🤖 Agente IA activo:</strong> Respondiendo automáticamente.</span>
+                </div>
+              )}
+              {leadChatMode === 'hybrid' && (
+                <div className="flex items-center gap-1.5 bg-amber-50 border-t border-amber-200 px-3.5 sm:px-5 py-1 text-[11px] text-amber-900 animate-fadeIn">
+                  <Zap size={12} className="text-amber-600 shrink-0" />
+                  <span className="truncate"><strong>⚡ Híbrido:</strong> La IA asiste. Si escribes, se silencia 30 min.</span>
+                </div>
+              )}
+              {leadChatMode === 'human' && (
+                <div className="flex items-center gap-1.5 bg-slate-50 border-t border-slate-200 px-3.5 sm:px-5 py-0.5 text-[10px] text-slate-600 animate-fadeIn">
+                  <User size={11} className="text-slate-500 shrink-0" />
+                  <span className="truncate"><strong>👤 Modo Humano:</strong> Atención manual. Cero respuestas de IA.</span>
+                </div>
+              )}
             </div>
 
             {/* Chat del lead */}
