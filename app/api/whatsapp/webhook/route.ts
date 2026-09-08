@@ -443,7 +443,14 @@ REGLAS ESTRICTAS PARA RESPONDER EN WHATSAPP:
         let aiReplyText = '';
 
         if (geminiApiKey) {
-          const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+          const candidateModels = [
+            agent.llm_model || 'gemini-3.6-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash',
+            'gemini-flash-latest',
+            'gemini-3.7-flash',
+          ];
+          const modelsToTry = Array.from(new Set(candidateModels));
           for (const mName of modelsToTry) {
             try {
               const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${geminiApiKey}`;
