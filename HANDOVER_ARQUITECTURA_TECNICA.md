@@ -10,7 +10,7 @@
 | :--- | :--- |
 | **Repositorio Local** | `C:\Users\Med Lab\Documents\Clientes\CRM Agentico\lead-suite` |
 | **Git Remote** | `https://github.com/medardotoledo/agenc-ia-crm.git` (Rama principal: `main`) |
-| **Último Commit Estable** | `d891186` (*feat(crm-chat): add global safety switch, renamed ai_agent/hybrid/human modes, db persistence and webhook safeguards*) |
+| **Último Commit Estable** | `efee979` (*feat(crm): add live contact search in conversations and ai mode switcher in lead panel whatsapp chat*) |
 | **Aplicación en Producción** | [https://app.crmagentico.online](https://app.crmagentico.online) |
 | **Servidor VPS (Hetzner)** | Host: `2.24.65.127:22` \| Usuario: `root` \| PWD SSH: `dad&9(5RuCpP4sdz` |
 | **Panel Coolify** | `http://2.24.65.127:8000` (PWD Coolify: `2mGvR76nm$*$2026`) |
