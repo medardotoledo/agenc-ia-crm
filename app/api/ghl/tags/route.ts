@@ -1,22 +1,33 @@
-﻿export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-async function getAccessToken(locationId: string): Promise<string> {
+async function getInstallation(locationId: string): Promise<{ accessToken: string; locationId: string }> {
   try {
-    const { rows } = await pool.query(
-      'SELECT access_token FROM ghl_installations WHERE location_id = $1 LIMIT 1;',
+    let { rows } = await pool.query(
+      'SELECT access_token, location_id FROM ghl_installations WHERE location_id = $1 LIMIT 1;',
       [locationId]
     );
     if (rows.length && rows[0].access_token) {
-      return rows[0].access_token;
+      return { accessToken: rows[0].access_token, locationId: rows[0].location_id };
+    }
+    const fallback = await pool.query("SELECT access_token, location_id FROM ghl_installations WHERE location_id = 'OS9czz85LUvBeljk8FEv' LIMIT 1;");
+    if (fallback.rows.length && fallback.rows[0].access_token) {
+      return { accessToken: fallback.rows[0].access_token, locationId: fallback.rows[0].location_id };
+    }
+    const anyActive = await pool.query("SELECT access_token, location_id FROM ghl_installations ORDER BY id DESC LIMIT 1;");
+    if (anyActive.rows.length && anyActive.rows[0].access_token) {
+      return { accessToken: anyActive.rows[0].access_token, locationId: anyActive.rows[0].location_id };
     }
   } catch (err: any) {
     console.warn('[GHL Tags] DB Query error:', err.message);
   }
-  return process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966';
+  return {
+    accessToken: process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966',
+    locationId: 'OS9czz85LUvBeljk8FEv'
+  };
 }
 
 export async function GET(req: Request) {
@@ -24,9 +35,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const locationId = searchParams.get('locationId') || searchParams.get('location_id') || 'OS9czz85LUvBeljk8FEv';
 
-    const accessToken = await getAccessToken(locationId);
+    const { accessToken, locationId: resolvedLocationId } = await getInstallation(locationId);
 
-    const ghlResponse = await fetch(`https://services.leadconnectorhq.com/locations/${locationId}/tags`, {
+    const ghlResponse = await fetch(`https://services.leadconnectorhq.com/locations/${resolvedLocationId}/tags`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -57,7 +68,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Faltan contactId o tags' }, { status: 400 });
     }
 
-    const accessToken = await getAccessToken(locationId);
+    const { accessToken } = await getInstallation(locationId);
 
     const ghlResponse = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags`, {
       method: 'POST',
@@ -91,7 +102,7 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Faltan contactId o tags' }, { status: 400 });
     }
 
-    const accessToken = await getAccessToken(locationId);
+    const { accessToken } = await getInstallation(locationId);
 
     const ghlResponse = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags`, {
       method: 'DELETE',

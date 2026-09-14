@@ -41,10 +41,10 @@ export async function loadStages(accountId: string): Promise<Record<string, stri
       });
       return labels;
     } else {
-      alert('GHL devolviÃƒÂ³ 0 pipelines.');
+      console.warn('GHL devolvió 0 pipelines.');
     }
   } catch (err: any) {
-    console.error('Error fetching GHL pipelines:', err); alert('Error GHL Pipelines: ' + err.message);
+    console.error('Error fetching GHL pipelines:', err);
   }
   // Fallback si no hay pipelines
   return { 'default': 'Sin Pipeline' };
@@ -61,7 +61,7 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
     }
     const data = await res.json();
     const opps = data.opportunities || [];
-    if(opps.length===0) alert('GHL devolviÃƒÂ³ 0 oportunidades.'); return opps.map((o: any) => ({
+    return opps.map((o: any) => ({
       id: o.id,
       contactId: o.contactId || o.id,
       name: o.name || o.contactName || 'Sin Nombre',
@@ -80,7 +80,7 @@ export async function fetchLeads(accountId: string, ownerOnlyId?: string | null)
       tags: ((o.tags && o.tags.length > 0 ? o.tags : o.contact?.tags) || []).map((t: string) => ({ id: t, name: t, color: '#e5e7eb' }))
     }));
   } catch (err: any) {
-    console.error('Error fetching GHL opportunities in fetchLeads:', err); alert('Error GHL Opps: ' + err.message);
+    console.error('Error fetching GHL opportunities in fetchLeads:', err);
   }
   return [];
 }
