@@ -123,7 +123,7 @@ export async function POST(request: Request) {
         if (updated) syncedResults.push(updated);
       } else {
         // Insertar nuevo usuario en la subcuenta
-        const { data: inserted, error: insErr } = await svc
+        let { data: inserted, error: insErr } = await svc
           .from('users')
           .insert({
             account_id: accountId,
@@ -136,6 +136,28 @@ export async function POST(request: Request) {
           })
           .select('id, name, email, role')
           .single();
+
+        if (insErr && insErr.message?.includes('users_auth_user_id_key')) {
+          // Si el auth_user_id ya está asignado a otra cuenta (ej: dueño de agencia multi-cuenta),
+          // se inserta con auth_user_id: null para no violar el constraint único
+          const retry = await svc
+            .from('users')
+            .insert({
+              account_id: accountId,
+              auth_user_id: null,
+              name,
+              email,
+              role,
+              is_active: true,
+              only_assigned_data: false,
+            })
+            .select('id, name, email, role')
+            .single();
+          if (!retry.error && retry.data) {
+            inserted = retry.data;
+            insErr = null;
+          }
+        }
 
         if (!insErr && inserted) {
           syncedResults.push(inserted);
