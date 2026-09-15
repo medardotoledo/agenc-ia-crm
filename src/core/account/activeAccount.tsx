@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 /**
  * â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -53,9 +53,26 @@ export function ActiveAccountProvider({ children }: { children: React.ReactNode 
     (async () => {
       let list: Account[] = [homeAccount];
 
-      // DueÃ±o de agencia: puede operar dentro de sus subcuentas (hijas).
+      // Dueño de agencia: puede operar dentro de sus subcuentas (hijas).
       if (isAgency) {
-        list = [homeAccount];
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          const res = await fetch('/api/agency/sub-accounts', {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (res.ok) {
+            const d = await res.json();
+            if (d.subAccounts && Array.isArray(d.subAccounts)) {
+              list = [homeAccount, ...d.subAccounts];
+            }
+          }
+        } catch (err) {
+          console.warn('[activeAccount] Error fetching sub-accounts:', err);
+        }
       }
 
       if (!mounted) return;
