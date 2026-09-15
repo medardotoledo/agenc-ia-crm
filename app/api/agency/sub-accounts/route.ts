@@ -11,6 +11,9 @@ import {
   slugify,
 } from '@/core/auth/serverAuth';
 import { ensureDefaultPipeline } from '@/modules/crm/server/pipeline';
+import { Pool } from 'pg';
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export async function GET(request: Request) {
   try {
@@ -38,10 +41,20 @@ export async function GET(request: Request) {
       }, {} as Record<string, string[]>);
     }
 
+    // Buscar qué subcuentas tienen GoHighLevel configurado en PostgreSQL
+    let ghlByAccount = new Map<string, string>();
+    try {
+      const { rows: ghlRows } = await pool.query('SELECT location_id, account_id FROM ghl_installations WHERE account_id IS NOT NULL;');
+      ghlByAccount = new Map(ghlRows.map(r => [r.account_id, r.location_id]));
+    } catch (err: any) {
+      console.warn('[sub-accounts GET] GHL installations query warning:', err.message);
+    }
+
     return Response.json({
       subAccounts: (subs ?? []).map((s) => ({
         ...s,
         modules: modulesByAccount[s.id] ?? [],
+        ghlLocationId: ghlByAccount.get(s.id) || null,
       })),
     });
   } catch (e) {
@@ -96,7 +109,25 @@ export async function POST(request: Request) {
       await ensureDefaultPipeline(svc, acc.id);
     }
 
-    return Response.json({ account: acc, modules });
+    // Si se enviaron credenciales de GoHighLevel, guardarlas
+    const ghlLocationId = String(body?.ghlLocationId ?? '').trim();
+    const ghlToken = String(body?.ghlToken ?? '').trim();
+    if (ghlLocationId && ghlToken) {
+      try {
+        await pool.query(`
+          INSERT INTO ghl_installations (location_id, access_token, refresh_token, account_id, updated_at)
+          VALUES ($1, $2, '', $3, CURRENT_TIMESTAMP)
+          ON CONFLICT (location_id) DO UPDATE SET
+            access_token = EXCLUDED.access_token,
+            account_id = EXCLUDED.account_id,
+            updated_at = CURRENT_TIMESTAMP;
+        `, [ghlLocationId, ghlToken, acc.id]);
+      } catch (err: any) {
+        console.warn('[sub-accounts POST] GHL save error:', err.message);
+      }
+    }
+
+    return Response.json({ account: acc, modules, ghlLocationId: ghlLocationId || null });
   } catch (e) {
     return authErrorResponse(e);
   }

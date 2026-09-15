@@ -20,8 +20,10 @@ export async function GET(req: Request) {
 
     // 1. Obtener el token de GHL desde nuestra base de datos PostgreSQL local
     let resolvedLocationId = locationId;
-    let { rows } = await pool.query('SELECT access_token, location_id FROM ghl_installations WHERE location_id = $1 LIMIT 1;', [locationId]);
-    if (!rows.length || !rows[0].access_token) {
+    let { rows } = await pool.query('SELECT access_token, location_id FROM ghl_installations WHERE location_id = $1 OR account_id = $1 LIMIT 1;', [locationId]);
+    if (rows.length && rows[0].access_token) {
+      resolvedLocationId = rows[0].location_id;
+    } else {
       const fallback = await pool.query("SELECT access_token, location_id FROM ghl_installations WHERE location_id = 'OS9czz85LUvBeljk8FEv' LIMIT 1;");
       if (fallback.rows.length && fallback.rows[0].access_token) {
         rows = fallback.rows;

@@ -7,7 +7,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 async function getInstallation(locationId: string): Promise<{ accessToken: string; locationId: string }> {
   try {
     let { rows } = await pool.query(
-      'SELECT access_token, location_id FROM ghl_installations WHERE location_id = $1 LIMIT 1;',
+      'SELECT access_token, location_id FROM ghl_installations WHERE location_id = $1 OR account_id = $1 LIMIT 1;',
       [locationId]
     );
     if (rows.length && rows[0].access_token) {
