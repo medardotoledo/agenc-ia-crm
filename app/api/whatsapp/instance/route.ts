@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://2.24.65.127:8085';
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'agencia_secret_wa_key_2026';
@@ -75,10 +75,15 @@ export async function GET(request: NextRequest) {
             }),
           }).catch((e) => console.warn('Failed to set webhook:', e));
 
+          const rawPhone = inst.number || (inst.ownerJid ? inst.ownerJid.split('@')[0] : null);
           return NextResponse.json({
             status: 'connected',
             instanceName,
             state: 'open',
+            ownerJid: inst.ownerJid || null,
+            profileName: inst.profileName || null,
+            profilePicUrl: inst.profilePicUrl || null,
+            phoneNumber: rawPhone,
           });
         }
       }

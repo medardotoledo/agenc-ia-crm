@@ -1,21 +1,32 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { MessageSquare, RefreshCw, CheckCircle2, AlertCircle, Smartphone, Trash2 } from 'lucide-react';
+import { MessageSquare, RefreshCw, CheckCircle2, AlertCircle, Smartphone, Trash2, Phone, User, RotateCcw } from 'lucide-react';
+import { useActiveAccount } from '@/core/account/activeAccount';
 
 interface WhatsAppSettingsProps {
   accountId: string;
 }
 
+interface ConnectedUserInfo {
+  name: string | null;
+  phone: string | null;
+  pic: string | null;
+}
+
 export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
+  const { account } = useActiveAccount();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<'connected' | 'qr_ready' | 'disconnected' | 'loading'>('loading');
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [userInfo, setUserInfo] = useState<ConnectedUserInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const effectiveId = accountId || account?.id || 'default-account';
+  const subAccountName = account?.name || 'Subcuenta actual';
+
   const checkStatus = async () => {
-    const effectiveId = accountId || 'default-account';
     setLoading(true);
     setError(null);
     try {
@@ -25,13 +36,20 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
       if (data.status === 'connected') {
         setStatus('connected');
         setQrCode(null);
+        setUserInfo({
+          name: data.profileName || null,
+          phone: data.phoneNumber || (data.ownerJid ? data.ownerJid.split('@')[0] : null),
+          pic: data.profilePicUrl || null,
+        });
       } else if (data.status === 'qr_ready' && data.qrcode) {
         setStatus('qr_ready');
         setQrCode(data.qrcode);
         setPairingCode(data.pairingCode || null);
+        setUserInfo(null);
       } else {
         setStatus('disconnected');
         setQrCode(null);
+        setUserInfo(null);
         if (data.error) setError(data.error);
         else if (data.debug_error) setError(`Error interno: ${data.debug_error}`);
       }
@@ -43,15 +61,27 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
     }
   };
 
-  const handleDisconnect = async () => {
-    if (!confirm('¿Seguro que deseas desconectar esta sesión de WhatsApp?')) return;
+  const handleDisconnect = async (promptUser = true) => {
+    if (promptUser) {
+      const ok = confirm(
+        `¿Seguro que deseas desconectar el WhatsApp de "${subAccountName}"?\n\n` +
+        `Esta acción cerrará la sesión actual para que puedas conectar cualquier otro número de teléfono escaneando un nuevo código QR.`
+      );
+      if (!ok) return;
+    }
+
     setLoading(true);
+    setError(null);
     try {
-      await fetch(`/api/whatsapp/instance?accountId=${accountId}`, { method: 'DELETE' });
-      await checkStatus();
+      await fetch(`/api/whatsapp/instance?accountId=${effectiveId}`, { method: 'DELETE' });
+      setUserInfo(null);
+      setQrCode(null);
+      setStatus('disconnected');
+      setTimeout(() => {
+        checkStatus();
+      }, 1000);
     } catch (err: any) {
-      setError(err.message);
-    } finally {
+      setError(err.message || 'Error al desconectar');
       setLoading(false);
     }
   };
@@ -65,7 +95,7 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
       }
     }, 8000);
     return () => clearInterval(interval);
-  }, [accountId, status]);
+  }, [effectiveId, status]);
 
   return (
     <div className="bg-white rounded-xl border border-line p-6 shadow-sm">
@@ -75,8 +105,13 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
             <MessageSquare className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-ink">WhatsApp Multi-Tenant (QR)</h2>
-            <p className="text-xs text-ink-soft">Conecta tu número personal o comercial escaneando el código QR</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold text-ink">WhatsApp Multi-Tenant</h2>
+              <span className="px-2 py-0.5 text-[10px] font-semibold bg-primary/10 text-primary rounded-full">
+                {subAccountName}
+              </span>
+            </div>
+            <p className="text-xs text-ink-soft">Conecta tu número escaneando el código QR</p>
           </div>
         </div>
 
@@ -99,31 +134,53 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
 
       {status === 'connected' ? (
         <div className="space-y-4">
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
-            <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0" />
+          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <h4 className="text-sm font-bold text-emerald-900">WhatsApp Conectado y Activo</h4>
-              <p className="text-xs text-emerald-700">
-                Tu sesión está sincronizada. Tu agente de IA y el CRM están listos para recibir y responder mensajes.
+              <p className="text-xs text-emerald-700 mt-0.5">
+                Esta subcuenta está sincronizada y lista para enviar y recibir mensajes con el agente de IA.
               </p>
+
+              {/* Información del número conectado */}
+              <div className="mt-3 pt-3 border-t border-emerald-200/60 flex flex-wrap items-center gap-4 text-xs text-emerald-900">
+                {userInfo?.pic && (
+                  <img
+                    src={userInfo.pic}
+                    alt={userInfo?.name || 'Perfil'}
+                    className="w-9 h-9 rounded-full object-cover border border-emerald-300"
+                  />
+                )}
+                {userInfo?.name && (
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <User className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{userInfo.name}</span>
+                  </div>
+                )}
+                {userInfo?.phone && (
+                  <div className="flex items-center gap-1.5 font-mono text-emerald-800 bg-emerald-100/70 px-2 py-1 rounded">
+                    <Phone className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>+{userInfo.phone}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-2">
             <button
               onClick={async () => {
-                const phone = prompt('Ingresa el número a donde enviar la prueba (incluye código de país sin el +, ej: 5215500000000):');
+                const phone = prompt('Ingresa el número a donde enviar la prueba (código de país sin el +, ej: 5215500000000):');
                 if (!phone) return;
                 setLoading(true);
                 try {
-                  const effectiveId = accountId || 'default-account';
                   const res = await fetch('/api/whatsapp/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       instanceName: `wa_${effectiveId.replace(/[^a-zA-Z0-9]/g, '_')}`,
                       number: phone,
-                      text: '¡Hola! Este es un mensaje de prueba desde CRM Agentico. 🤖✨'
+                      text: `¡Hola! Mensaje de prueba desde ${subAccountName} en CRM Agentico. 🤖✨`
                     })
                   });
                   if (!res.ok) throw new Error(await res.text());
@@ -140,12 +197,13 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
               Probar Mensaje
             </button>
             <button
-              onClick={handleDisconnect}
+              onClick={() => handleDisconnect(true)}
               disabled={loading}
-              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition"
+              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition border border-transparent hover:border-red-200"
+              title="Desconectar este número y vincular otro"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Desconectar WhatsApp
+              Desconectar y cambiar número
             </button>
           </div>
         </div>
@@ -154,10 +212,10 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
           <div className="text-center space-y-1">
             <h4 className="text-sm font-bold text-ink flex items-center justify-center gap-1.5">
               <Smartphone className="w-4 h-4 text-green-600" />
-              Escanea el Código QR
+              Vincular WhatsApp a {subAccountName}
             </h4>
             <p className="text-xs text-ink-soft max-w-sm">
-              Abre WhatsApp en tu celular ➡️ Ajustes / Configuración ➡️ Dispositivos vinculados ➡️ Vincular un dispositivo.
+              Abre WhatsApp en el celular que atenderá esta cuenta ➡️ <strong>Dispositivos vinculados</strong> ➡️ <strong>Vincular un dispositivo</strong>.
             </p>
           </div>
 
@@ -179,15 +237,30 @@ export function WhatsAppSettings({ accountId }: WhatsAppSettingsProps) {
             <RefreshCw className="w-3 h-3 animate-spin text-green-600" />
             Esperando escaneo desde tu teléfono...
           </p>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={() => handleDisconnect(false)}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-ink-soft hover:text-ink hover:bg-white rounded-lg transition border border-line"
+              title="Reiniciar y generar un código QR nuevo"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reiniciar QR
+            </button>
+          </div>
         </div>
       ) : (
         <div className="text-center py-6 space-y-3">
-          <p className="text-xs text-ink-soft">No hay ninguna sesión de WhatsApp vinculada a esta subcuenta.</p>
+          <p className="text-xs text-ink-soft">
+            No hay ninguna sesión de WhatsApp vinculada a <strong className="text-ink">{subAccountName}</strong>.
+          </p>
           <button
             onClick={checkStatus}
             disabled={loading}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm transition inline-flex items-center gap-2"
           >
+            <Smartphone className="w-4 h-4" />
             Generar Código QR para Vincular
           </button>
         </div>
