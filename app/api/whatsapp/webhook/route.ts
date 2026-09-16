@@ -8,16 +8,28 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
-async function getGHLToken(accountId: string): Promise<string> {
+async function getGHLInstallation(accountId: string): Promise<{ accessToken: string; locationId: string }> {
   try {
     const client = await pool.connect();
     try {
       const result = await client.query(
-        'SELECT access_token FROM ghl_installations WHERE location_id = $1 LIMIT 1;',
+        'SELECT access_token, location_id FROM ghl_installations WHERE location_id = $1 OR account_id = $1 LIMIT 1;',
         [accountId]
       );
       if (result.rows.length > 0 && result.rows[0].access_token) {
-        return result.rows[0].access_token;
+        return {
+          accessToken: result.rows[0].access_token,
+          locationId: result.rows[0].location_id || accountId,
+        };
+      }
+      const fallback = await client.query(
+        'SELECT access_token, location_id FROM ghl_installations ORDER BY id DESC LIMIT 1;'
+      );
+      if (fallback.rows.length > 0 && fallback.rows[0].access_token) {
+        return {
+          accessToken: fallback.rows[0].access_token,
+          locationId: fallback.rows[0].location_id,
+        };
       }
     } finally {
       client.release();
@@ -25,7 +37,43 @@ async function getGHLToken(accountId: string): Promise<string> {
   } catch (err: any) {
     console.warn('[Webhook] DB Query warning:', err.message);
   }
-  return process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966';
+  return {
+    accessToken: process.env.GHL_API_TOKEN || 'pit-f7368d7d-1b53-4682-9096-cb7b87909966',
+    locationId: accountId || 'OS9czz85LUvBeljk8FEv',
+  };
+}
+
+const ghlTemplatesCache: Record<string, { fetchedAt: number; templates: { name: string; body: string }[] }> = {};
+
+async function fetchGHLTemplates(locationId: string, accessToken: string): Promise<{ name: string; body: string }[]> {
+  const now = Date.now();
+  if (ghlTemplatesCache[locationId] && now - ghlTemplatesCache[locationId].fetchedAt < 10 * 60 * 1000) {
+    return ghlTemplatesCache[locationId].templates;
+  }
+  try {
+    const res = await fetch(`https://services.leadconnectorhq.com/locations/${locationId}/templates`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Version: '2021-07-28',
+        Accept: 'application/json',
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const raw = data.templates || [];
+      const list = raw
+        .map((t: any) => ({
+          name: t.name || 'Sin nombre',
+          body: (t.template?.body || t.body || '').trim(),
+        }))
+        .filter((t: any) => t.body.length > 0);
+      ghlTemplatesCache[locationId] = { fetchedAt: now, templates: list };
+      return list;
+    }
+  } catch (err: any) {
+    console.warn('[Webhook WA] Error fetching GHL templates:', err.message);
+  }
+  return [];
 }
 
 async function fetchBase64FromEvolution(instance: string, key: any): Promise<string | null> {
@@ -132,8 +180,8 @@ export async function POST(req: Request) {
       accountId = instance.replace(/^(sub_|wa_)/, '');
     }
 
-    // 1. Obtener Token de GoHighLevel
-    const ghlToken = await getGHLToken(accountId);
+    // 1. Obtener Token y LocationId de GoHighLevel
+    const { accessToken: ghlToken, locationId: resolvedLocationId } = await getGHLInstallation(accountId);
     const ghlHeaders = {
       Authorization: `Bearer ${ghlToken}`,
       'Content-Type': 'application/json',
@@ -468,6 +516,21 @@ ${p.knowledge_sheet || ''}`).join('\n\n');
           }
         }
 
+        // 3.1 Obtener Snippets / Plantillas Oficiales de GoHighLevel
+        let snippetsContext = '';
+        try {
+          const ghlSnippets = await fetchGHLTemplates(resolvedLocationId, ghlToken);
+          if (ghlSnippets.length > 0) {
+            snippetsContext = ghlSnippets
+              .slice(0, 15)
+              .map((s) => `• [Snippet Oficial: ${s.name}]
+"${s.body}"`)
+              .join('\n\n');
+          }
+        } catch (sErr: any) {
+          console.warn('[Webhook WA] Error obteniendo snippets GHL:', sErr.message);
+        }
+
         // 4. Obtener personalidad (ia_soul)
         const iaSoul = typeof agent.ia_soul === 'string' ? JSON.parse(agent.ia_soul) : (agent.ia_soul || {});
         const soulRules = iaSoul.custom_rules || 'Habla como una asesora cercana, empática, profesional y educada. Usa emojis amigables y tono humano.';
@@ -484,26 +547,42 @@ ${productContext || 'Consulta los servicios oficiales de la empresa.'}
 === SEGUNDO CEREBRO (CONOCIMIENTO COMERCIAL, TÉCNICO Y CLÍNICO) ===
 ${brainContext}
 
+=== RESPUESTAS PRE-DEFINIDAS Y SNIPPETS OFICIALES DE LA CLÍNICA (GOHIGHLEVEL) ===
+${snippetsContext || '(Aún no hay plantillas/snippets guardados en GoHighLevel)'}
+
 REGLAS DE ORO Y GUARDRAILS DE CONVERSIÓN (OBLIGATORIAS):
 1. ATENDEMOS PERSONAS, NO TRANSACCIONES: Tu objetivo principal es generar confianza, reducir miedos y ser el antídoto al dolor o la incertidumbre del cliente.
-2. POLÍTICA DE PRECIOS: Si el cliente pregunta por costos, responde siempre con RANGOS DE INVERSIÓN y ancla la cita de valoración o diagnóstico para darle el costo exacto y personalizado según su caso.
-3. NEURO-SEMÁNTICA (BOTONES MENTALES):
+2. GUARDRAIL DE PRIMERA INTERACCIÓN (PROHIBIDO PREJUZGAR AL LEAD COMO ROJO):
+   - En el primer mensaje del prospecto o si su mensaje es genérico/corto ("quiero información", "deseo informes", "precio", "info", "hola"):
+     NUNCA lo clasifiques ni prejuzgues de inmediato como ROJO (D). La gran mayoría de los prospectos entran con el texto predeterminado de un anuncio de Meta o WhatsApp.
+   - Aplica SIEMPRE la Bienvenida Cálida Dental Art:
+     a) Saludo cálido, humano y sonriente ("Nadie nos gana el saludo" + Ojos, Sonrisa y Nombre si lo tenemos).
+     b) Agradece su mensaje y valida su interés con empatía.
+     c) Aplica "El Doctor de las Ventas" (Brian Tracy): Haz una PREGUNTA DIAGNÓSTICA ABIERTA para conocer qué busca antes de apresurar cualquier cierre.
+        Ejemplo: "¡Hola! Qué gusto saludarte, con muchísimo gusto te comparto toda la información. Para orientarte exactamente en lo que tú necesitas, ¿tienes en mente algún tratamiento o molestia en particular, o estás buscando una valoración preventiva de rutina? Platícame con confianza y te voy guiando. 😊✨"
+   - Su respuesta a esta pregunta abierta será la que revele su verdadero perfil psicológico DISC.
+3. USO DE SNIPPETS Y PLANTILLAS OFICIALES (GOHIGHLEVEL):
+   - Revisa si la pregunta o necesidad del paciente coincide con alguna de las "RESPUESTAS PRE-DEFINIDAS Y SNIPPETS OFICIALES" listadas arriba (ej. ubicación de la clínica, formas de pago, promociones oficiales, indicaciones pre/post).
+   - Si coincide, UTILIZA esa información oficial como la base de tu respuesta para garantizar exactitud clínica y comercial.
+   - NUNCA lo envíes como un copy-paste robótico: intégralo de forma natural, humana y empática respetando los datos exactos del snippet.
+4. POLÍTICA DE PRECIOS: Si el cliente pregunta por costos, responde siempre con RANGOS DE INVERSIÓN y ancla la cita de valoración o diagnóstico para darle el costo exacto y personalizado según su caso.
+5. NEURO-SEMÁNTICA (BOTONES MENTALES):
    - NUNCA uses palabras de fricción o dolor financiero como: "costo", "gasto", "pagar", "cuota", "cobro".
    - USA palabras de valor y respaldo como: "inversión", "garantía", "resultado", "tu nueva sonrisa", "acompañamiento", "tecnología".
    - Si tocas un riesgo o dolor para concientizar (ej. "evitar complicaciones mayores", "prevenir infecciones silenciosas"), sé de inmediato el antídoto ofreciendo la solución.
-4. METODOLOGÍA DE VENTAS (BRIAN TRACY):
+6. METODOLOGÍA DE VENTAS (BRIAN TRACY):
    - "El Doctor de las Ventas": Diagnostica antes de recetar. Antes de cerrar, haz una pregunta de calificación para entender su necesidad o dolor real.
    - "Cierre por Doble Alternativa": NUNCA preguntes "¿Quieres agendar?" o "¿Te gustaría una cita?". Ofrece siempre dos opciones concretas de horario: "¿Te queda mejor el jueves por la mañana o el viernes por la tarde?".
-5. CALIBRACIÓN PSICOLÓGICA DISC (EN TIEMPO REAL):
-   - Si el prospecto es ROJO (D): Directo, resultados, sin rodeos, máximo 2 oraciones breves, cerrar rápido.
+7. CALIBRACIÓN PSICOLÓGICA DISC (A PARTIR DE SU SEGUNDA INTERACCIÓN / RESPUESTA DIAGNÓSTICA):
+   - Si el prospecto es ROJO (D): Directo, resultados, sin rodeos, máximo 2 oraciones breves, agendar rápido.
    - Si es AMARILLO (I): Entusiasta, sociable, valida su imagen/estética ("¡Te vas a ver increíble!"), usa emojis amigables.
-   - Si es VERDE (S): Paciente, protector, transmite tranquilidad, cero dolor, garantías por escrito y que va a su ritmo.
+   - Si es VERDE (S): Paciente, protector, transmite tranquilidad, cero dolor, garantías por escrito y que va a su ritmo seguro.
    - Si es AZUL (C): Datos duros, calidad de materiales, certificaciones y proceso clínico transparente paso a paso.
-6. PROTOCOLO DE INCERTIDUMBRE Y ESCALACIÓN NIVEL 2:
-   - Si el cliente pregunta por un tratamiento, caso clínico específico o procedimiento que NO esté en tu catálogo ni en tu Segundo Cerebro: NUNCA inventes información ni alucines.
+8. PROTOCOLO DE INCERTIDUMBRE Y ESCALACIÓN NIVEL 2:
+   - Si el cliente pregunta por un tratamiento, caso clínico específico o procedimiento que NO esté en tu catálogo ni en tu Segundo Cerebro ni en los snippets oficiales: NUNCA inventes información ni alucines.
    - Responde con la pausa empática: "Con mucho gusto te apoyo con esa duda. Justo ese detalle específico prefiero consultarlo directamente con el Doctor / Especialista para darte la indicación exacta y personalizada. Dame unos momentos, se lo consulto y te respondo por aquí mismo con la información precisa. 👨‍⚕️✨"
    - Agrega al final el código interno [REQUIERE_APOYO: motivo breve].
-7. LONGITUD PARA WHATSAPP:
+9. LONGITUD PARA WHATSAPP:
    - Respuestas concisas, humanas y directas (máximo 2 a 3 oraciones cortas por mensaje). NUNCA mandes párrafos gigantescos ni listas aburridas.
    - NUNCA digas que eres una IA, un bot o un asistente virtual. Eres una persona de carne y hueso del equipo.
    - Responde ÚNICAMENTE con el mensaje final directo para enviar al cliente.`;
