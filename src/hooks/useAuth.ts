@@ -55,19 +55,36 @@ export function useAuth() {
     // Fallback legacy: si aÃºn no hay fila en `users`, usa accounts.user_id.
     // El `account` DEBE quedar poblado antes de apagar `loading` (los guards
     // de /admin redirigen a login si falta).
-    async function loadProfile(authUserId: string) {
-      // 1) Fila en users (NÃºcleo): rol, permisos y subcuenta.
-      const { data: u } = await supabase
+    async function loadProfile(authUserId: string, userEmail?: string) {
+      // 1) Fila en users (Núcleo): rol, permisos y subcuenta.
+      let { data: u } = await supabase
         .from('users')
         .select('id, name, account_id, role, permissions, only_assigned_data')
         .eq('auth_user_id', authUserId)
         .maybeSingle();
 
+      // Fallback para Google OAuth: si es primera vez con Google, buscar por email y vincular
+      if (!u && userEmail) {
+        const { data: byEmail } = await supabase
+          .from('users')
+          .select('id, name, account_id, role, permissions, only_assigned_data')
+          .ilike('email', userEmail)
+          .maybeSingle();
+
+        if (byEmail) {
+          await supabase
+            .from('users')
+            .update({ auth_user_id: authUserId })
+            .eq('id', byEmail.id);
+          u = byEmail;
+        }
+      }
+
       if (!mounted) return;
 
       let accountId = (u?.account_id as string | undefined) ?? undefined;
 
-      // 2) Fallback legacy por accounts.user_id (usuarios sin fila en users aÃºn).
+      // 2) Fallback legacy por accounts.user_id (usuarios sin fila en users aún).
       if (!accountId) {
         const { data: a } = await supabase
           .from('accounts')
@@ -99,8 +116,8 @@ export function useAuth() {
       setLoading(false);
     }
 
-    // ÃšNICO listener: onAuthStateChange
-    // Supabase automÃ¡ticamente lee del localStorage al iniciar
+    // ÚNICO listener: onAuthStateChange
+    // Supabase automáticamente lee del localStorage al iniciar
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!mounted) return;
@@ -117,7 +134,7 @@ export function useAuth() {
           // onAuthStateChange provoca un deadlock en supabase-js (el callback
           // retiene el lock de auth que la query necesita). Lo sacamos del lock.
           setTimeout(() => {
-            void loadProfile(session.user.id);
+            void loadProfile(session.user.id, session.user.email);
           }, 0);
         } else {
           setUser(null);
