@@ -32,7 +32,7 @@ export default function LoginPage() {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Redirigir a admin
-      router.push('/admin/properties');
+      router.push('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
     } finally {
@@ -44,8 +44,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Real Estate SaaS</h1>
-          <p className="text-slate-400">Panel de Control Inmobiliario</p>
+          <h1 className="text-3xl font-bold text-white mb-2">CRM Agéntico</h1>
+          <p className="text-slate-400">Panel de Control y Fábrica de Agentes IA</p>
         </div>
 
         <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-8">

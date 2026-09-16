@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 
       // Si no existe login en Supabase Auth, crearlo
       if (!authUserId) {
-        const defaultPassword = 'DentalArt2026!' + Math.floor(100 + Math.random() * 900);
+        const defaultPassword = 'DentalArt2026!';
         const { data: createdAuth, error: authErr } = await svc.auth.admin.createUser({
           email,
           password: defaultPassword,
