@@ -18,6 +18,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       [id]
     );
 
+    const { rows: products } = await pool.query(
+      'SELECT name, short_description, price_range, target_triggers, irresistible_offer, knowledge_sheet FROM ai_agent_products WHERE agent_id = $1 ORDER BY display_order ASC;',
+      [id]
+    );
+
+    const productOffersSummary = products.map((p: any, i: number) => {
+      return `[Servicio ${i + 1}: ${p.name}]
+Descripción: ${p.short_description || ''}
+Inversión: ${p.price_range || ''}
+Oferta Irresistible: ${p.irresistible_offer || 'Enfoque en valor y garantía.'}
+Ficha Sintetizada: ${p.knowledge_sheet ? p.knowledge_sheet.slice(0, 500) + '...' : ''}`;
+    }).join('\n\n');
+
     const studyFiles = knowledge.filter((k: any) => k.folder === 'material_estudio');
     const shareableFiles = knowledge.filter((k: any) => k.folder === 'material_compartible');
 
@@ -70,6 +83,8 @@ CRUCIAL: Debes tejer DATOS TÉCNICOS DUROS (especificaciones, medidas, certifica
 3. Robert Cialdini (7 Leyes): Reciprocidad, Autoridad basada en datos, Prueba Social, Escasez real, Micro-compromisos.
 4. Alex Hormozi ($100M Offers): El "Mecanismo Único", maximizar certeza y reducir esfuerzo percibido a cero.
 5. Fórmula Híbrida del Usuario: Beneficio Emocional + Mecanismo Técnico Real (micras, PSI, materiales) + Future Pacing + Micro-CTA.
+6. Calibración Psicológica DISC (Rojo/D, Amarillo/I, Verde/S, Azul/C): En '01-identidad-y-tono' y '05-oferta-y-plan', define las reglas de cómo el agente adapta su estilo, longitud y tono a cada color de personalidad.
+7. Venta Consultiva Brian Tracy: El agente diagnostica antes de recetar, usa cierres por doble alternativa (2 opciones de horario) y aísla objeciones.
 
 Debes responder ÚNICAMENTE con un objeto JSON válido (sin código markdown exterior) con esta estructura exacta:
 {
@@ -83,6 +98,9 @@ Debes responder ÚNICAMENTE con un objeto JSON válido (sin código markdown ext
 }
 
 A continuación la MATERIA PRIMA del negocio:
+
+=== CATÁLOGO DE PRODUCTOS Y OFERTAS IRRESISTIBLES ===
+${productOffersSummary || 'Sin catálogo registrado aún.'}
 
 === MATERIAL DE ESTUDIO (100% CONFIDENCIAL / SOLO PARA APRENDIZAJE) ===
 ${studySummary || 'No se proporcionó texto explícito de estudio. Usa el contexto de la empresa y el nombre del agente.'}
