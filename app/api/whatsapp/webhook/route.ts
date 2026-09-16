@@ -432,16 +432,17 @@ export async function POST(req: Request) {
 
         // Obtener fichas de productos
         const { rows: productRows } = await pool.query(
-          `SELECT name, short_description, knowledge_sheet, target_triggers, price_range 
+          `SELECT name, short_description, knowledge_sheet, target_triggers, price_range, irresistible_offer 
            FROM ai_agent_products 
            WHERE agent_id = $1 OR agent_id IN (SELECT id FROM ai_agents WHERE account_id = $2 OR account_id = 'OS9czz85LUvBeljk8FEv') 
            ORDER BY display_order ASC;`,
           [agent.id, accountId]
         );
-        const productContext = productRows.map((p: any) => `### PRODUCTO: ${p.name}
+        const productContext = productRows.map((p: any) => `### PRODUCTO / SERVICIO: ${p.name}
 Descripción: ${p.short_description || ''}
-Rango de Precio: ${p.price_range || 'Consultar promoción activa'}
-Gatillos / Disparadores: ${p.target_triggers || ''}
+Rango de Inversión: ${p.price_range || 'Consultar valoración'}
+Gatillos / Síntomas: ${p.target_triggers || ''}
+${p.irresistible_offer ? `Oferta Irresistible Empaquetada:\n${p.irresistible_offer}\n` : ''}
 Ficha de Conocimiento:
 ${p.knowledge_sheet || ''}`).join('\n\n');
 
@@ -472,25 +473,40 @@ ${p.knowledge_sheet || ''}`).join('\n\n');
         const soulRules = iaSoul.custom_rules || 'Habla como una asesora cercana, empática, profesional y educada. Usa emojis amigables y tono humano.';
 
         // 5. Construir System Prompt con el Segundo Cerebro y Guardrails Inmutables
-        const systemPrompt = `Eres ${agent.name}, ${agent.role || 'Setter Comercial y Consultora en Salud Metabólica'}.
+        const systemPrompt = `Eres ${agent.name}, ${agent.role || 'Especialista en Atención y Ventas'}.
 Directrices de Personalidad y Estilo:
 ${soulRules}
 ${agent.system_instructions ? `\nInstrucciones específicas del negocio:\n${agent.system_instructions}` : ''}
 
-=== PRODUCTOS OFICIALES DE LA EMPRESA ===
-${productContext || 'Producto estrella: PHIX (Modulador del Nervio Vago para activación natural de GLP-1 endógeno).'}
+=== CATÁLOGO Y OFERTAS IRRESISTIBLES DE LA EMPRESA ===
+${productContext || 'Consulta los servicios oficiales de la empresa.'}
 
-=== SEGUNDO CEREBRO (CONOCIMIENTO CIENTÍFICO Y ESTRATEGIA DE CONVERSIÓN) ===
+=== SEGUNDO CEREBRO (CONOCIMIENTO COMERCIAL, TÉCNICO Y CLÍNICO) ===
 ${brainContext}
 
-REGLAS DE ORO Y GUARDRAILS INMUTABLES (OBLIGATORIAS):
-1. TU ÚNICA SOLUCIÓN Y RESPALDO ES EL PRODUCTO PHIX Y SU BIOTECNOLOGÍA.
-2. NUNCA des consejos genéricos de nutrición ("ajustar tu alimentación", "hacer dieta", "hacer ejercicio", "ir al médico"). El cliente acude a ti por la biotecnología avanzada de PHIX.
-3. Cuando el cliente hable de grasa visceral, sobrepeso, antojos o energía, fundamenta tu respuesta en el MECANISMO ÚNICO DE PHIX: El Eje Nervio Vago estimulado por Ácidos Amargos del Lúpulo, que activa la producción natural de GLP-1 en el cuerpo sin inyecciones ni fármacos sintéticos.
-4. Aplica la Fórmula Híbrida: [Validación empática] + [Mecanismo Único de PHIX] + [Pregunta de calificación o micro-compromiso].
-5. Longitud para WhatsApp: Respuestas concisas, cálidas y directas (máximo 2 a 3 oraciones cortas por mensaje). No abrumes con textos gigantes ni listas.
-6. NUNCA digas que eres una IA, un bot o un asistente virtual. Eres una persona de carne y hueso del equipo.
-7. Responde ÚNICAMENTE con el mensaje final directo para enviar al cliente. NUNCA incluyas pensamientos, notas de verificación ni confirmaciones internas.`;
+REGLAS DE ORO Y GUARDRAILS DE CONVERSIÓN (OBLIGATORIAS):
+1. ATENDEMOS PERSONAS, NO TRANSACCIONES: Tu objetivo principal es generar confianza, reducir miedos y ser el antídoto al dolor o la incertidumbre del cliente.
+2. POLÍTICA DE PRECIOS: Si el cliente pregunta por costos, responde siempre con RANGOS DE INVERSIÓN y ancla la cita de valoración o diagnóstico para darle el costo exacto y personalizado según su caso.
+3. NEURO-SEMÁNTICA (BOTONES MENTALES):
+   - NUNCA uses palabras de fricción o dolor financiero como: "costo", "gasto", "pagar", "cuota", "cobro".
+   - USA palabras de valor y respaldo como: "inversión", "garantía", "resultado", "tu nueva sonrisa", "acompañamiento", "tecnología".
+   - Si tocas un riesgo o dolor para concientizar (ej. "evitar complicaciones mayores", "prevenir infecciones silenciosas"), sé de inmediato el antídoto ofreciendo la solución.
+4. METODOLOGÍA DE VENTAS (BRIAN TRACY):
+   - "El Doctor de las Ventas": Diagnostica antes de recetar. Antes de cerrar, haz una pregunta de calificación para entender su necesidad o dolor real.
+   - "Cierre por Doble Alternativa": NUNCA preguntes "¿Quieres agendar?" o "¿Te gustaría una cita?". Ofrece siempre dos opciones concretas de horario: "¿Te queda mejor el jueves por la mañana o el viernes por la tarde?".
+5. CALIBRACIÓN PSICOLÓGICA DISC (EN TIEMPO REAL):
+   - Si el prospecto es ROJO (D): Directo, resultados, sin rodeos, máximo 2 oraciones breves, cerrar rápido.
+   - Si es AMARILLO (I): Entusiasta, sociable, valida su imagen/estética ("¡Te vas a ver increíble!"), usa emojis amigables.
+   - Si es VERDE (S): Paciente, protector, transmite tranquilidad, cero dolor, garantías por escrito y que va a su ritmo.
+   - Si es AZUL (C): Datos duros, calidad de materiales, certificaciones y proceso clínico transparente paso a paso.
+6. PROTOCOLO DE INCERTIDUMBRE Y ESCALACIÓN NIVEL 2:
+   - Si el cliente pregunta por un tratamiento, caso clínico específico o procedimiento que NO esté en tu catálogo ni en tu Segundo Cerebro: NUNCA inventes información ni alucines.
+   - Responde con la pausa empática: "Con mucho gusto te apoyo con esa duda. Justo ese detalle específico prefiero consultarlo directamente con el Doctor / Especialista para darte la indicación exacta y personalizada. Dame unos momentos, se lo consulto y te respondo por aquí mismo con la información precisa. 👨‍⚕️✨"
+   - Agrega al final el código interno [REQUIERE_APOYO: motivo breve].
+7. LONGITUD PARA WHATSAPP:
+   - Respuestas concisas, humanas y directas (máximo 2 a 3 oraciones cortas por mensaje). NUNCA mandes párrafos gigantescos ni listas aburridas.
+   - NUNCA digas que eres una IA, un bot o un asistente virtual. Eres una persona de carne y hueso del equipo.
+   - Responde ÚNICAMENTE con el mensaje final directo para enviar al cliente.`;
 
         // 6. Generar respuesta con Gemini
         const geminiApiKey = accountKeys.gemini_key || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -553,6 +569,41 @@ REGLAS DE ORO Y GUARDRAILS INMUTABLES (OBLIGATORIAS):
         if (!aiReplyText) {
           console.warn('[Webhook WA] No se pudo generar respuesta de IA (falló Gemini o no hay API key).');
           return NextResponse.json({ success: true, contactId: ghlContactId, aiAutoReply: false, reason: 'llm_failed' });
+        }
+
+        // Detección de Escalación Nivel 2
+        let requiresEscalation = false;
+        let escalationReason = '';
+        if (aiReplyText.includes('[REQUIERE_APOYO:')) {
+          requiresEscalation = true;
+          const match = aiReplyText.match(/\[REQUIERE_APOYO:\s*([^\]]+)\]/i);
+          escalationReason = match ? match[1].trim() : 'Duda clínica fuera de base de conocimiento';
+          aiReplyText = aiReplyText.replace(/\[REQUIERE_APOYO:[^\]]+\]/gi, '').trim();
+
+          // Pausar el chat a modo híbrido
+          await pool.query(
+            `UPDATE crm_chat_controls SET ai_mode = 'hybrid', updated_at = NOW() 
+             WHERE account_id = $1 AND (chat_id = $2 OR chat_id = $3);`,
+            [accountId, cleanPhone, ghlContactId]
+          ).catch((e: any) => console.warn('[Webhook WA] Error setting hybrid mode:', e.message));
+
+          // Agregar Tag en GoHighLevel
+          if (ghlContactId) {
+            fetch(`https://services.leadconnectorhq.com/contacts/${ghlContactId}/tags`, {
+              method: 'POST',
+              headers: ghlHeaders,
+              body: JSON.stringify({ tags: ['requiere-doctor'] }),
+            }).catch((e: any) => console.warn('[Webhook WA] Error adding tag to GHL:', e.message));
+
+            // Dejar nota interna en GoHighLevel
+            fetch(`https://services.leadconnectorhq.com/contacts/${ghlContactId}/notes`, {
+              method: 'POST',
+              headers: ghlHeaders,
+              body: JSON.stringify({
+                body: `🚨 Alerta Nivel 2: El cliente preguntó algo fuera del Segundo Cerebro (${escalationReason}). La IA fue pausada a modo Híbrido.`,
+              }),
+            }).catch((e: any) => console.warn('[Webhook WA] Error adding note to GHL:', e.message));
+          }
         }
 
         // Limpiar formato innecesario o artefactos de pensamiento

@@ -37,7 +37,10 @@ import {
   Check,
   Mic,
   MicOff,
-  Volume2
+  Volume2,
+  Lock,
+  Unlock,
+  FileUp
 } from 'lucide-react';
 
 export interface ModelOption {
@@ -83,6 +86,9 @@ export interface ProductData {
   study_files_count?: number;
   shareable_files_count?: number;
   has_knowledge_sheet?: boolean;
+  irresistible_offer?: string;
+  market_intel_data?: any;
+  offer_interview_data?: any;
   created_at?: string;
 }
 
@@ -175,6 +181,20 @@ export default function AgentsFactoryView() {
   const [productVoiceSuccess, setProductVoiceSuccess] = useState<{ title: string; wordCount: number } | null>(null);
   const [productVoiceError, setProductVoiceError] = useState<string | null>(null);
   const productRecognitionRef = useRef<any>(null);
+
+  // Estados para la Entrevista de Oferta Irresistible (Fase 1 y Fase 2)
+  const [processingBaseInfo, setProcessingBaseInfo] = useState(false);
+  const [marketIntelReady, setMarketIntelReady] = useState(false);
+  const [interviewQuestions, setInterviewQuestions] = useState<Array<{ id: number; title: string; contextual_prompt: string; category: string }>>([]);
+  const [interviewInputMode, setInterviewInputMode] = useState<'voice' | 'file' | 'text'>('text');
+  const [interviewTextAnswer, setInterviewTextAnswer] = useState('');
+  const [interviewAudioText, setInterviewAudioText] = useState('');
+  const [isRecordingInterview, setIsRecordingInterview] = useState(false);
+  const [interviewUploadFileName, setInterviewUploadFileName] = useState<string | null>(null);
+  const [synthesizingOffer, setSynthesizingOffer] = useState(false);
+  const [offerSuccessData, setOfferSuccessData] = useState<any | null>(null);
+  const [interviewError, setInterviewError] = useState<string | null>(null);
+  const interviewRecognitionRef = useRef<any>(null);
 
   // Cerebro global y simulaciones
   const [brainDocs, setBrainDocs] = useState<BrainDoc[]>([]);
@@ -333,6 +353,25 @@ export default function AgentsFactoryView() {
         setSelectedProduct(data.product);
         setProductStudyFiles(data.studyFiles || []);
         setProductShareableFiles(data.shareableFiles || []);
+
+        // Cargar estado de Oferta e Inteligencia de Mercado
+        fetch('/api/agents/' + agentId + '/products/' + prodId + '/offer-interview')
+          .then((r) => r.json())
+          .then((offerData) => {
+            if (offerData.success) {
+              setMarketIntelReady(Boolean(offerData.marketIntelReady));
+              if (offerData.market_intel_data?.questions) {
+                setInterviewQuestions(offerData.market_intel_data.questions);
+              }
+              if (offerData.offer_interview_data) {
+                setOfferSuccessData(offerData.offer_interview_data);
+              }
+              if (offerData.irresistible_offer && !interviewTextAnswer) {
+                setInterviewTextAnswer(offerData.irresistible_offer);
+              }
+            }
+          })
+          .catch((e) => console.warn('Offer interview fetch error:', e.message));
       }
     } catch (err: any) {
       setError('Error al abrir producto: ' + err.message);
@@ -800,6 +839,104 @@ export default function AgentsFactoryView() {
         setProductVoiceError
       );
       productRecognitionRef.current = rec;
+    }
+  };
+
+  // ════════════════════════════════════════════════════════════════════════
+  // MANEJADORES: ENTREVISTA DE OFERTA IRRESISTIBLE & MARKET INTEL
+  // ════════════════════════════════════════════════════════════════════════
+  const handleToggleInterviewRecording = () => {
+    if (isRecordingInterview) {
+      if (interviewRecognitionRef.current) {
+        try { interviewRecognitionRef.current.stop(); } catch {}
+        interviewRecognitionRef.current = null;
+      }
+      setIsRecordingInterview(false);
+    } else {
+      setInterviewError(null);
+      const rec = startSpeechRecognition(
+        (chunk) => {
+          setInterviewAudioText((prev) => (prev ? prev + ' ' + chunk : chunk));
+          setInterviewTextAnswer((prev) => (prev ? prev + ' ' + chunk : chunk));
+        },
+        setIsRecordingInterview,
+        setInterviewError
+      );
+      interviewRecognitionRef.current = rec;
+    }
+  };
+
+  const handleUploadInterviewFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setInterviewUploadFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (text) {
+        setInterviewTextAnswer((prev) => prev ? prev + '\n\n[Archivo ' + file.name + ']:\n' + text : text);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleProcessBaseInfo = async () => {
+    if (!selectedAgentId || !selectedProductId) return;
+    setProcessingBaseInfo(true);
+    setInterviewError(null);
+    try {
+      const res = await fetch('/api/agents/' + selectedAgentId + '/products/' + selectedProductId + '/offer-interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'process_base' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al procesar información base');
+
+      setMarketIntelReady(true);
+      if (data.questions && data.questions.length > 0) {
+        setInterviewQuestions(data.questions);
+      }
+      setSuccessMsg('⚡ ¡Información base procesada! La IA ya leyó tus documentos y desbloqueó tu Entrevista de Oferta Irresistible.');
+    } catch (err: any) {
+      setInterviewError(err.message);
+    } finally {
+      setProcessingBaseInfo(false);
+    }
+  };
+
+  const handleSynthesizeOffer = async () => {
+    if (!selectedAgentId || !selectedProductId) return;
+    if (isRecordingInterview) {
+      if (interviewRecognitionRef.current) {
+        try { interviewRecognitionRef.current.stop(); } catch {}
+        interviewRecognitionRef.current = null;
+      }
+      setIsRecordingInterview(false);
+    }
+    setSynthesizingOffer(true);
+    setInterviewError(null);
+    try {
+      const content = interviewTextAnswer.trim() || interviewAudioText.trim() || 'Servicio de alta calidad con garantía y atención personalizada.';
+      const res = await fetch('/api/agents/' + selectedAgentId + '/products/' + selectedProductId + '/offer-interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'synthesize_offer',
+          rawOfferText: content,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al empaquetar oferta');
+
+      setOfferSuccessData(data.synthesized_data);
+      setSuccessMsg('🎉 ¡Oferta Irresistible empaquetada con éxito! Ficha de Conocimiento actualizada y blindada con DISC y Brian Tracy.');
+      await fetchProductDetail(selectedAgentId, selectedProductId);
+      await fetchProducts(selectedAgentId);
+    } catch (err: any) {
+      setInterviewError(err.message);
+    } finally {
+      setSynthesizingOffer(false);
     }
   };
 
@@ -1726,6 +1863,315 @@ export default function AgentsFactoryView() {
                               </div>
                             )}
 
+                          </div>
+
+                          {/* ══════════════════════════════════════════════════════════════════════════ */}
+                          {/* 🚀 ESTRATEGIA COMERCIAL: MARKET INTELLIGENCE & OFERTA IRRESISTIBLE       */}
+                          {/* ══════════════════════════════════════════════════════════════════════════ */}
+                          <div className="rounded-2xl border-2 border-indigo-200/90 bg-gradient-to-b from-indigo-50/40 to-white p-5 space-y-5 shadow-sm">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 pb-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                                  🎯
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                    Estrategia de Conversión: Market Intelligence & Oferta Irresistible
+                                  </h4>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    Metodología en 2 Fases para blindar la psicología del agente con DISC y cierres de Brian Tracy.
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-900 border border-indigo-200">
+                                Alex Hormozi + DISC
+                              </span>
+                            </div>
+
+                            {/* Alertas de error en la entrevista */}
+                            {interviewError && (
+                              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                                  <span>{interviewError}</span>
+                                </div>
+                                <button onClick={() => setInterviewError(null)} className="font-bold underline hover:text-rose-950">
+                                  Descartar
+                                </button>
+                              </div>
+                            )}
+
+                            {/* ⚡ PASO 1: PROCESAR INFORMACIÓN BASE (Market Intelligence Silencioso) */}
+                            <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center">1</span>
+                                    <h5 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                                      Paso 1: Procesar Información Base & Documentos
+                                    </h5>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    La IA analiza los campos y archivos de la Zona 1 para deducir las búsquedas del mercado, puntos débiles de la competencia y el dolor del avatar.
+                                  </p>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={handleProcessBaseInfo}
+                                  disabled={processingBaseInfo}
+                                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm shrink-0 active:scale-95 ${
+                                    processingBaseInfo
+                                      ? 'bg-amber-100 text-amber-900 cursor-wait'
+                                      : marketIntelReady
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                                      : 'bg-slate-900 hover:bg-black text-white'
+                                  }`}
+                                >
+                                  {processingBaseInfo ? (
+                                    <>
+                                      <RotateCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                      <span>Analizando Documentos...</span>
+                                    </>
+                                  ) : marketIntelReady ? (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>Base Analizada (Volver a Procesar)</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                                      <span>⚡ Procesar Información Base</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+
+                              {marketIntelReady && (
+                                <div className="text-[11px] text-emerald-700 bg-emerald-50/70 p-2 rounded-lg border border-emerald-200/80 flex items-center gap-2">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>Market Intelligence deducido con éxito. Las preguntas personalizadas están listas abajo.</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 🔓 PASO 2: ENTREVISTA DE LA OFERTA IRRESISTIBLE */}
+                            {!marketIntelReady ? (
+                              /* CASO BLOQUEADO: Con candado informativo */
+                              <div className="p-6 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 text-center space-y-2">
+                                <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center mx-auto">
+                                  <Lock className="w-5 h-5" />
+                                </div>
+                                <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                  Paso 2: Entrevista de la Oferta Irresistible (Bloqueada)
+                                </h5>
+                                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                                  Primero haz clic en el botón <strong>&quot;⚡ Procesar Información Base&quot;</strong> de arriba para que la IA lea tus documentos y formule las preguntas exactas a la medida de tu servicio.
+                                </p>
+                              </div>
+                            ) : (
+                              /* CASO DESBLOQUEADO: Entrevista multimodal */
+                              <div className="p-4 rounded-xl bg-white border border-indigo-300 space-y-4 shadow-sm animate-fade-in">
+                                <div className="flex items-center justify-between border-b border-indigo-50 pb-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+                                    <div>
+                                      <h5 className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                                        <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                                        Entrevista de la Oferta Irresistible (Desbloqueada)
+                                      </h5>
+                                      <p className="text-[11px] text-slate-500">
+                                        Responde estas preguntas con tus propias palabras para que la IA empaquete tu oferta y programe las tácticas de venta.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    Paso Activo
+                                  </span>
+                                </div>
+
+                                {/* Preguntas generadas por la IA */}
+                                <div className="space-y-2 bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-100">
+                                  <span className="text-[11px] font-bold text-indigo-900 block mb-1">
+                                    Preguntas clave extraídas de tus documentos:
+                                  </span>
+                                  {(interviewQuestions.length > 0 ? interviewQuestions : [
+                                    { id: 1, title: '¿Por qué deberían elegirte a ti y no a tu competencia?', contextual_prompt: '¿Cuál es tu diferenciador principal?' },
+                                    { id: 2, title: 'El Efecto Starbucks: ¿Qué extras o comodidades se llevan?', contextual_prompt: '¿Qué tecnología o atenciones adicionales ofreces sin costo extra?' },
+                                    { id: 3, title: 'Garantía y Tranquilidad', contextual_prompt: '¿Qué garantía o certeza das a quien tiene dudas?' },
+                                    { id: 4, title: 'El Gancho de Entrada', contextual_prompt: '¿Cuál es el primer paso fácil que le propones a un prospecto en WhatsApp?' },
+                                  ]).map((q: any, i: number) => (
+                                    <div key={q.id || i} className="text-xs text-slate-700 flex items-start gap-2 bg-white/80 p-2 rounded-lg border border-indigo-100/60">
+                                      <span className="font-bold text-indigo-600 shrink-0">{i + 1}.</span>
+                                      <div>
+                                        <span className="font-semibold text-slate-900">{q.title}: </span>
+                                        <span className="text-slate-600">{q.contextual_prompt || q.title}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Selector de Modalidad de Entrada: Voz / Archivo / Texto */}
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-700">
+                                      ¿Cómo prefieres responder la entrevista?
+                                    </label>
+                                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                                      <button
+                                        type="button"
+                                        onClick={() => setInterviewInputMode('text')}
+                                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                          interviewInputMode === 'text' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                      >
+                                        ⌨️ Escribir
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setInterviewInputMode('voice')}
+                                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                          interviewInputMode === 'voice' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                      >
+                                        🎙️ Por Voz
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setInterviewInputMode('file')}
+                                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                          interviewInputMode === 'file' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                      >
+                                        📄 Subir Archivo
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Sub-panel por Voz */}
+                                  {interviewInputMode === 'voice' && (
+                                    <div className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-200 space-y-2.5 animate-fade-in">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                                          <Mic className="w-3.5 h-3.5 text-purple-600" />
+                                          Grabadora de Voz para la Entrevista
+                                        </span>
+                                        {isRecordingInterview && (
+                                          <span className="text-[10px] font-bold text-rose-600 animate-pulse flex items-center gap-1">
+                                            🔴 Grabando... Habla libremente
+                                          </span>
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={handleToggleInterviewRecording}
+                                        className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${
+                                          isRecordingInterview
+                                            ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse'
+                                            : 'bg-purple-600 hover:bg-purple-700 text-white active:scale-95'
+                                        }`}
+                                      >
+                                        {isRecordingInterview ? (
+                                          <>
+                                            <MicOff className="w-4 h-4" />
+                                            <span>Detener Grabación y Procesar Texto</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Mic className="w-4 h-4" />
+                                            <span>Comenzar a Hablar (Dictar Respuestas)</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* Sub-panel de Subir Archivo */}
+                                  {interviewInputMode === 'file' && (
+                                    <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200 space-y-2.5 animate-fade-in">
+                                      <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                                        <FileUp className="w-3.5 h-3.5 text-blue-600" />
+                                        Subir Documento con tu Oferta Previa (Word / PDF / TXT)
+                                      </span>
+                                      <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 text-xs font-semibold cursor-pointer transition-all shadow-sm">
+                                        <UploadCloud className="w-4 h-4 text-blue-600" />
+                                        <span>{interviewUploadFileName ? `Archivo: ${interviewUploadFileName}` : 'Seleccionar Documento'}</span>
+                                        <input
+                                          type="file"
+                                          accept=".txt,.md,.doc,.docx,.pdf"
+                                          className="hidden"
+                                          onChange={handleUploadInterviewFile}
+                                        />
+                                      </label>
+                                    </div>
+                                  )}
+
+                                  {/* Área de texto consolidada */}
+                                  <textarea
+                                    value={interviewTextAnswer}
+                                    onChange={(e) => setInterviewTextAnswer(e.target.value)}
+                                    rows={4}
+                                    placeholder="Aquí aparecerán tus respuestas dictadas, del archivo o escritas manualmente. Ejemplo: 'Nosotros nos enfocamos en que no haya dolor gracias a nuestra tecnología digital. Incluimos escaneo 3D y garantía por escrito de 1 año...'"
+                                    className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 placeholder:text-slate-400"
+                                  />
+                                </div>
+
+                                {/* Botón de Síntesis Final */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                                  <p className="text-[11px] text-slate-500">
+                                    Al hacer clic, la IA compila la Oferta Irresistible, programa los botones mentales y calibra las respuestas con DISC y Brian Tracy.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={handleSynthesizeOffer}
+                                    disabled={synthesizingOffer || !interviewTextAnswer.trim()}
+                                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 shrink-0"
+                                  >
+                                    {synthesizingOffer ? (
+                                      <>
+                                        <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                                        <span>Empaquetando Oferta...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                        <span>✨ Empaquetar Oferta Irresistible</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Resumen del resultado si ya fue empaquetada */}
+                                {offerSuccessData && (
+                                  <div className="mt-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                        Oferta Empaquetada & Blindada:
+                                      </span>
+                                      <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
+                                        Guardado en Memoria
+                                      </span>
+                                    </div>
+                                    <p className="text-slate-700 text-[11px] italic bg-white p-2.5 rounded-lg border border-slate-200/80">
+                                      {offerSuccessData.irresistible_offer_summary || selectedProduct?.irresistible_offer}
+                                    </p>
+                                    {offerSuccessData.buttons_dictionary && (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                                        <div className="bg-rose-50/70 p-2 rounded-lg border border-rose-200/80 text-rose-900">
+                                          <span className="font-bold block mb-0.5">🚫 Palabras Prohibidas (Fricción):</span>
+                                          {(offerSuccessData.buttons_dictionary.forbidden_words || []).join(', ')}
+                                        </div>
+                                        <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-200/80 text-emerald-900">
+                                          <span className="font-bold block mb-0.5">💎 Palabras de Poder (Valor):</span>
+                                          {(offerSuccessData.buttons_dictionary.power_words || []).join(', ')}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {/* 📱 ZONA 2: ARCHIVOS PARA ENVIAR POR WHATSAPP */}
