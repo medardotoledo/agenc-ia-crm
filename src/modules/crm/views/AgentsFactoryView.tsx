@@ -713,6 +713,36 @@ export default function AgentsFactoryView() {
     }
   };
 
+  // Eliminar Agente completo
+  const handleDeleteAgent = async () => {
+    if (!selectedAgentId || !selectedAgent) return;
+    const confirmName = prompt(
+      `¿Estás seguro de que deseas eliminar al agente "${selectedAgent.name}"?\n\nEsta acción borrará al agente, todos sus productos y su Segundo Cerebro.\n\nEscribe ELIMINAR para confirmar:`
+    );
+    if (confirmName !== 'ELIMINAR') return;
+
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/agents/${selectedAgentId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setSuccessMsg(`El agente "${selectedAgent.name}" y todo su Segundo Cerebro fueron eliminados.`);
+        setSelectedAgentId(null);
+        setSelectedAgent(null);
+        await fetchAgents();
+      } else {
+        const err = await res.json();
+        setError(err.error || 'Error al eliminar el agente');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => setSuccessMsg(null), 5000);
+    }
+  };
+
   // Reconocimiento de voz nativo en navegador (es-MX)
   const startSpeechRecognition = (
     onAppendText: (chunk: string) => void,
@@ -3051,6 +3081,28 @@ export default function AgentsFactoryView() {
                           className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-md shadow-indigo-600/20 transition-all active:scale-95"
                         >
                           {actionLoading ? 'Guardando...' : 'Guardar Ajustes'}
+                        </button>
+                      </div>
+
+                      {/* Zona de Peligro: Eliminar Agente */}
+                      <div className="pt-6 mt-6 border-t border-red-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-red-50/40 p-4 rounded-2xl border">
+                        <div>
+                          <h4 className="text-sm font-bold text-red-700 flex items-center gap-1.5">
+                            <AlertTriangle className="w-4 h-4 text-red-500" />
+                            Eliminar este Agente
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Se eliminará permanentemente "{selectedAgent.name}", su catálogo de productos y todo su Segundo Cerebro.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleDeleteAgent}
+                          disabled={actionLoading}
+                          className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md shadow-red-600/20 transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Eliminar Agente
                         </button>
                       </div>
                     </div>

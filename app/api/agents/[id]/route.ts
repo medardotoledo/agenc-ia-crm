@@ -141,8 +141,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    await pool.query('DELETE FROM ai_agent_brains WHERE agent_id = $1;', [id]);
+    await pool.query('DELETE FROM ai_agent_products WHERE agent_id = $1;', [id]);
+    await pool.query('DELETE FROM ai_agent_knowledge WHERE agent_id = $1;', [id]);
+    await pool.query('DELETE FROM ai_agent_simulations WHERE agent_id = $1;', [id]);
     await pool.query('DELETE FROM ai_agents WHERE id = $1;', [id]);
-    return NextResponse.json({ success: true, message: 'Agente y todo su Segundo Cerebro eliminados.' });
+    return NextResponse.json({ success: true, message: 'Agente y todo su Segundo Cerebro eliminados con éxito.' });
   } catch (err: any) {
     console.error('[API Agent ID DELETE] Error:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
