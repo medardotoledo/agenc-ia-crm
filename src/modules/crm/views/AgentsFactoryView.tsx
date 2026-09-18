@@ -947,7 +947,10 @@ export default function AgentsFactoryView() {
     setSynthesizingOffer(true);
     setInterviewError(null);
     try {
-      const content = interviewTextAnswer.trim() || interviewAudioText.trim() || 'Servicio de alta calidad con garantía y atención personalizada.';
+      const fallbackQuestionsText = interviewQuestions.length > 0 
+        ? interviewQuestions.map((q: any, i: number) => `[${i + 1}. ${q.title}]\n${q.contextual_prompt || q.title}`).join('\n\n')
+        : 'Servicio de alta calidad con garantía y atención personalizada.';
+      const content = interviewTextAnswer.trim() || interviewAudioText.trim() || fallbackQuestionsText;
       const res = await fetch('/api/agents/' + selectedAgentId + '/products/' + selectedProductId + '/offer-interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2061,6 +2064,27 @@ export default function AgentsFactoryView() {
                                       </div>
                                     </div>
                                   ))}
+
+                                  {/* Botón rápido para aceptar o pre-cargar propuestas en el editor */}
+                                  <div className="pt-2.5 mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-indigo-100">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const defaultAnswers = (interviewQuestions.length > 0 ? interviewQuestions : []).map((q: any, i: number) => 
+                                          `${i + 1}. ${q.title}\nRespuesta: ${q.contextual_prompt || q.title}`
+                                        ).join('\n\n');
+                                        setInterviewTextAnswer(defaultAnswers);
+                                        setInterviewInputMode('text');
+                                      }}
+                                      className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                      <span>Copiar Respuestas de la IA al Editor (Para Ajustar o Guardar)</span>
+                                    </button>
+                                    <span className="text-[11px] text-indigo-700 font-medium">
+                                      💡 Si te parecen perfectas, puedes hacer clic directo en <strong>Empaquetar Oferta</strong> abajo.
+                                    </span>
+                                  </div>
                                 </div>
 
                                 {/* Selector de Modalidad de Entrada: Voz / Archivo / Texto */}
@@ -2176,8 +2200,8 @@ export default function AgentsFactoryView() {
                                   <button
                                     type="button"
                                     onClick={handleSynthesizeOffer}
-                                    disabled={synthesizingOffer || !interviewTextAnswer.trim()}
-                                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 shrink-0"
+                                    disabled={synthesizingOffer}
+                                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
                                   >
                                     {synthesizingOffer ? (
                                       <>
@@ -2187,7 +2211,11 @@ export default function AgentsFactoryView() {
                                     ) : (
                                       <>
                                         <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                                        <span>✨ Empaquetar Oferta Irresistible</span>
+                                        <span>
+                                          {!interviewTextAnswer.trim() && interviewQuestions.length > 0
+                                            ? '✨ Aprobar Propuestas de la IA y Empaquetar'
+                                            : '✨ Empaquetar Oferta Irresistible'}
+                                        </span>
                                       </>
                                     )}
                                   </button>
