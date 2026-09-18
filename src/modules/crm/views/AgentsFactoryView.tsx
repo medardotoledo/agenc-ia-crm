@@ -1047,7 +1047,6 @@ export default function AgentsFactoryView() {
         body: JSON.stringify({ scenario: customScenario.trim() || undefined }),
       });
       if (!res.ok) throw new Error('Fallo al simular combate');
-      setCustomScenario('');
       setSuccessMsg('Combate simulado completado.');
       await fetchAgentDetails(selectedAgentId);
     } catch (err: any) {
@@ -2845,25 +2844,58 @@ export default function AgentsFactoryView() {
                 {/* ══════════════ PESTAÑA: GIMNASIO DE ROLE-PLAYING ══════════════ */}
                 {activeTab === 'gimnasio' && (
                   <div className="space-y-6">
-                    <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-sm font-bold text-amber-950 flex items-center gap-2">
-                          <Sliders className="w-4 h-4 text-amber-700" />
-                          Gimnasio de Auto-Entrenamiento (Self-Play)
-                        </h3>
-                        <p className="text-xs text-amber-800/80 mt-0.5">
-                          Un Comprador Escéptico pone a prueba a tu agente. Aprueba o ajusta en 1 clic.
-                        </p>
+                    {/* Panel de Control de Combate: Escenarios y Disparador */}
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-50/70 via-white to-amber-50/40 border border-amber-200/80 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-amber-950 flex items-center gap-2">
+                            <Sliders className="w-4 h-4 text-amber-700" />
+                            Gimnasio de Role-Playing (Simulación de WhatsApp)
+                          </h3>
+                          <p className="text-xs text-amber-800/80 mt-0.5">
+                            Simula conversaciones reales de varios turnos (anuncios, productos, miedos, precios y citas) para entrenar a tu agente.
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={handleRunSimulation}
+                          disabled={simulating}
+                          className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/25 flex items-center gap-2 active:scale-95 shrink-0 cursor-pointer disabled:opacity-50"
+                        >
+                          <Play className={`w-4 h-4 ${simulating ? 'animate-spin' : ''}`} />
+                          <span>{simulating ? 'Simulando Combate...' : '⚡ Generar Nuevo Combate'}</span>
+                        </button>
                       </div>
 
-                      <button
-                        onClick={handleRunSimulation}
-                        disabled={simulating}
-                        className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-sm flex items-center gap-2 active:scale-95 shrink-0"
-                      >
-                        <Play className={`w-3.5 h-3.5 ${simulating ? 'animate-spin' : ''}`} />
-                        <span>{simulating ? 'Simulando...' : 'Generar Nuevo Combate'}</span>
-                      </button>
+                      {/* Chips de Selección Rápida de Escenario */}
+                      <div className="pt-2.5 border-t border-amber-100/80 space-y-2">
+                        <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                          Elige qué situación quieres poner a prueba:
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {[
+                            { label: '🎲 Aleatorio (Rotativo)', value: '' },
+                            { label: '📢 Vi tu anuncio / ¿De qué trata?', value: 'El cliente vio un anuncio en Instagram/Facebook y escribe por primera vez preguntando de qué se trata su clínica o qué servicios tienen.' },
+                            { label: '🦷 Info de Servicio Específico', value: 'El cliente escribe con genuino interés pidiendo información detallada de uno de los servicios de su catálogo: cómo funciona, qué incluye, duración y procedimiento.' },
+                            { label: '😨 Miedo al Dolor / Malas Experiencias', value: 'El cliente tiene un problema dental urgente pero tiene pavor al dolor y malas experiencias previas, exigiendo saber si de verdad no duele.' },
+                            { label: '💰 Precio y Facilidades de Pago', value: 'El cliente pregunta por costos, promociones y facilidades de pago (meses sin intereses o financiamiento ATRATO Pago).' },
+                            { label: '📅 Cierre de Cita y Horarios', value: 'El cliente ya está listo para acudir y pregunta qué horarios y días tienen disponibles para valoración en sus sucursales.' },
+                          ].map((chip, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setCustomScenario(chip.value)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                                customScenario === chip.value
+                                  ? 'bg-amber-600 text-white border-amber-700 shadow-sm'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+                              }`}
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {simulations.length === 0 ? (

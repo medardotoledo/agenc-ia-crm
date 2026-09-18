@@ -45,28 +45,84 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }, { status: 400 });
     }
 
-    const simPrompt = `Eres el Entrenador en Jefe y Sparring Partner de IA para Ventas y Servicio.
-Tu objetivo es simular un COMBATE DE ENTRENAMIENTO (Self-Play) entre:
-1. Comprador Escéptico: Desconfiado, sensible al precio, hace preguntas capciosas o compara con la competencia.
-2. Agente en Entrenamiento: "${agent.name}" (Rol: ${agent.role}), quien debe responder usando estrictamente el Segundo Cerebro y el Maletín de WhatsApp.
+    const { rows: products } = await pool.query(
+      'SELECT name, short_description, price_range, irresistible_offer FROM ai_agent_products WHERE agent_id = $1 ORDER BY display_order ASC;',
+      [id]
+    );
 
-Escenario a simular: "${scenario || 'El cliente dice que el servicio o producto le parece caro y que ya tiene otra cotización más barata de un competidor'}"
+    const productsContext = products.map((p: any, idx: number) => 
+      `- Servicio ${idx + 1}: "${p.name}". Descripción: ${p.short_description || ''}. Rango Inversión: ${p.price_range || ''}. Oferta: ${p.irresistible_offer || ''}`
+    ).join('\n');
 
-Debes devolver un JSON con esta estructura exacta:
+    const sampleProduct = products.length > 0 
+      ? products[Math.floor(Math.random() * products.length)].name 
+      : 'sus servicios dentales y tratamientos';
+
+    const defaultScenarios = [
+      {
+        name: 'Entrada por Anuncio / Información General',
+        prompt: `El cliente vio un anuncio en redes sociales de ${agent.name} / la clínica y escribe con una pregunta típica de apertura: "Hola, buenas tardes, vi su anuncio en redes sociales, ¿de qué se trata o qué servicios manejan?"`
+      },
+      {
+        name: `Interés en Servicio Específico (${sampleProduct})`,
+        prompt: `El cliente escribe interesado en un servicio específico del catálogo ("${sampleProduct}"): "Hola, vi que ofrecen ${sampleProduct}, ¿me podrían dar información de cómo funciona, qué incluye y cuál es el procedimiento?"`
+      },
+      {
+        name: 'Miedo al Dolor / Validación Emocional',
+        prompt: 'El cliente necesita atención pero tiene miedo o desconfianza por malas experiencias previas: "Hola, me interesa atenderme pero la verdad le tengo pavor al dentista y al dolor. ¿Cómo garantizan que con ustedes no voy a sentir dolor?"'
+      },
+      {
+        name: 'Objeción de Precio y Facilidades de Pago',
+        prompt: 'El cliente pregunta por costos, promociones y formas de pago: "Hola, me interesa atenderme con ustedes pero quiero saber si tienen facilidades de pago o mensualidades, porque en otros lugares me parece muy costoso."'
+      },
+      {
+        name: 'Cierre y Agendamiento de Cita',
+        prompt: 'El cliente ya está convencido y pide fecha para acudir: "Hola, quiero agendar una cita de valoración esta semana para mí o mi familia, ¿qué días y horarios tienen disponibles en sus sucursales?"'
+      }
+    ];
+
+    const chosenScenario = scenario 
+      ? { name: scenario, prompt: scenario }
+      : defaultScenarios[Math.floor(Math.random() * defaultScenarios.length)];
+
+    const simPrompt = `Eres el Entrenador en Jefe y Sparring Partner de IA para Ventas y Servicio de Élite.
+Tu objetivo es simular un COMBATE DE ENTRENAMIENTO REALISTA Y MULTI-TURNO (Self-Play) entre:
+1. Prospecto / Comprador de WhatsApp: Una persona real con dudas, curiosidad o una necesidad concreta.
+2. Agente en Entrenamiento: "${agent.name}" (Rol: ${agent.role}), quien debe responder usando estrictamente el Segundo Cerebro, las Ofertas Irresistibles de los productos y venta consultiva (Brian Tracy, Chris Voss, Hormozi, DISC).
+
+Escenario específico a simular:
+"${chosenScenario.prompt}"
+
+REGLA CRUCIAL DE REALISMO:
+- NO simules una sola pregunta y una sola respuesta.
+- Debe ser una CONVERSACIÓN COMPLETA Y REALISTA de 4 a 6 turnos (2 a 3 intervenciones de cada uno) simulando un chat fluido de WhatsApp:
+  * Turno 1 (buyer): El cliente inicia según el escenario planteado.
+  * Turno 2 (agent): El agente saluda con calidez humana, responde con alto valor/mecanismo único y hace una pregunta de diagnóstico.
+  * Turno 3 (buyer): El cliente responde al diagnóstico o plantea una duda de seguimiento (sucursales, horarios, tecnología, etc.).
+  * Turno 4 (agent): El agente responde resolviendo la duda, da certeza y propone un micro-compromiso o cierre por alternativa.
+  * Turno 5 (buyer, opcional): El cliente muestra acuerdo o pide confirmar el horario.
+  * Turno 6 (agent, opcional): El agente confirma y deja el siguiente paso claro.
+
+Debes devolver ÚNICAMENTE un JSON válido con esta estructura exacta:
 {
   "simulations": [
     {
-      "scenario_name": "${scenario || 'Objeción de Precio y Comparativa con Competencia'}",
-      "buyer_persona": "Comprador Escéptico y Analítico",
+      "scenario_name": "${chosenScenario.name}",
+      "buyer_persona": "Prospecto Real en WhatsApp",
       "dialogue": [
-        { "sender": "buyer", "text": "Oye, pero vi uno casi igual en Amazon que cuesta la mitad..." },
-        { "sender": "agent", "text": "Entiendo perfecto tu punto Carlos..." }
+        { "sender": "buyer", "text": "Mensaje del cliente..." },
+        { "sender": "agent", "text": "Respuesta de ${agent.name}..." },
+        { "sender": "buyer", "text": "Siguiente mensaje del cliente..." },
+        { "sender": "agent", "text": "Siguiente respuesta de ${agent.name}..." }
       ],
       "score": 95,
-      "feedback_notes": "Defendió el mecanismo técnico sin confrontar y usó etiqueta táctica de Chris Voss."
+      "feedback_notes": "Explicación de aciertos técnicos, manejo de objeción o cierre consultivo."
     }
   ]
 }
+
+Catálogo de Productos del Negocio:
+${productsContext || 'Sin productos específicos registrados aún.'}
 
 Contexto del Segundo Cerebro del Agente:
 ${brainContext || 'Usa respuestas asertivas, datos técnicos duros y empatía.'}`;
