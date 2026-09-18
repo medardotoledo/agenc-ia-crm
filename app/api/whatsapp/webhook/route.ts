@@ -593,10 +593,10 @@ REGLAS DE ORO Y GUARDRAILS DE CONVERSIÓN (OBLIGATORIAS):
 
         if (geminiApiKey) {
           const candidateModels = [
-            agent.llm_model || 'gemini-3.6-flash',
             'gemini-3.6-flash',
+            'gemini-flash-lite-latest',
+            agent.llm_model || 'gemini-3.6-flash',
             'gemini-3.5-flash',
-            'gemini-flash-latest',
           ];
           const modelsToTry = Array.from(new Set(candidateModels));
 

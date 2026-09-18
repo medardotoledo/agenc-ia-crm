@@ -29,10 +29,10 @@ async function callLLM(provider: string, apiKey: string, model: string, prompt: 
 
   if (provider === 'google') {
     const candidateModels = [
-      model && !model.startsWith('gemini-2') ? model : 'gemini-3.5-flash',
-      'gemini-3.5-flash',
-      'gemini-3.7-flash',
       'gemini-3.6-flash',
+      'gemini-flash-lite-latest',
+      model && !model.startsWith('gemini-2') && !model.startsWith('gemini-1') ? model : 'gemini-3.6-flash',
+      'gemini-3.5-flash',
     ];
     const modelsToTry = Array.from(new Set(candidateModels));
     let lastError = '';

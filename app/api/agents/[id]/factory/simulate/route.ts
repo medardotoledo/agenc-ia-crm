@@ -75,10 +75,10 @@ ${brainContext || 'Usa respuestas asertivas, datos técnicos duros y empatía.'}
 
     if (provider === 'google') {
       const candidateModels = [
-        agent.llm_model && !agent.llm_model.startsWith('gemini-2') ? agent.llm_model : 'gemini-3.5-flash',
-        'gemini-3.5-flash',
-        'gemini-3.7-flash',
         'gemini-3.6-flash',
+        'gemini-flash-lite-latest',
+        agent.llm_model && !agent.llm_model.startsWith('gemini-2') && !agent.llm_model.startsWith('gemini-1') ? agent.llm_model : 'gemini-3.6-flash',
+        'gemini-3.5-flash',
       ];
       const modelsToTry = Array.from(new Set(candidateModels));
 
