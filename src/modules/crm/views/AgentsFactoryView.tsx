@@ -1302,88 +1302,110 @@ export default function AgentsFactoryView() {
                 </button>
               </div>
 
-              {/* Pestañas de Navegación */}
-              <div className="flex border-b border-slate-200 px-6 gap-6 text-sm font-medium">
+              {/* Barra de Navegación por Pasos y Ajustes (Estilo Botones / Proceso) */}
+              <div className="flex items-center flex-wrap gap-2 px-6 py-3.5 bg-slate-50/70 border-b border-slate-200 overflow-x-auto">
+                {/* Paso 1: Productos y Servicios */}
                 <button
                   onClick={() => {
                     setActiveTab('productos');
                     setSelectedProductId(null);
                     setSelectedProduct(null);
                   }}
-                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     activeTab === 'productos'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                      ? 'bg-blue-600 text-white border-blue-700 shadow-md shadow-blue-600/30 ring-2 ring-blue-500 ring-offset-1 translate-y-0.5'
+                      : 'bg-blue-50/80 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300 hover:-translate-y-0.5 shadow-sm'
                   }`}
                 >
-                  <Package className="w-4 h-4" />
-                  <span>Productos y Servicios</span>
-                  <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600">
+                  <Package className={`w-4 h-4 ${activeTab === 'productos' ? 'text-white' : 'text-blue-600'}`} />
+                  <span>1. Productos y Servicios</span>
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+                    activeTab === 'productos' ? 'bg-white/20 text-white' : 'bg-blue-200/70 text-blue-800'
+                  }`}>
                     {products.length}
                   </span>
                 </button>
 
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0 hidden lg:block" />
+
+                {/* Paso 2: Red Neuronal */}
                 <button
                   onClick={() => setActiveTab('grafo')}
-                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     activeTab === 'grafo'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                      ? 'bg-sky-600 text-white border-sky-700 shadow-md shadow-sky-600/30 ring-2 ring-sky-500 ring-offset-1 translate-y-0.5'
+                      : 'bg-sky-50/80 text-sky-700 border-sky-200 hover:bg-sky-100 hover:border-sky-300 hover:-translate-y-0.5 shadow-sm'
                   }`}
                 >
-                  <Network className="w-4 h-4" />
-                  <span>Red Neuronal (Grafo)</span>
+                  <Network className={`w-4 h-4 ${activeTab === 'grafo' ? 'text-white' : 'text-sky-600'}`} />
+                  <span>2. Red Neuronal (Grafo)</span>
                 </button>
 
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0 hidden lg:block" />
+
+                {/* Paso 3: Personalidad (ia-soul) */}
                 <button
                   onClick={() => setActiveTab('soul')}
-                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     activeTab === 'soul'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                      ? 'bg-rose-600 text-white border-rose-700 shadow-md shadow-rose-600/30 ring-2 ring-rose-500 ring-offset-1 translate-y-0.5'
+                      : 'bg-rose-50/80 text-rose-700 border-rose-200 hover:bg-rose-100 hover:border-rose-300 hover:-translate-y-0.5 shadow-sm'
                   }`}
                 >
-                  <Heart className="w-4 h-4 text-rose-500" />
-                  <span>Personalidad (ia-soul)</span>
+                  <Heart className={`w-4 h-4 ${activeTab === 'soul' ? 'text-white fill-white' : 'text-rose-500 fill-rose-500'}`} />
+                  <span>3. Personalidad (ia-soul)</span>
                 </button>
 
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0 hidden lg:block" />
+
+                {/* Paso 4: Segundo Cerebro Global */}
                 <button
                   onClick={() => setActiveTab('cerebro')}
-                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     activeTab === 'cerebro'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                      ? 'bg-purple-600 text-white border-purple-700 shadow-md shadow-purple-600/30 ring-2 ring-purple-500 ring-offset-1 translate-y-0.5'
+                      : 'bg-purple-50/80 text-purple-700 border-purple-200 hover:bg-purple-100 hover:border-purple-300 hover:-translate-y-0.5 shadow-sm'
                   }`}
                 >
-                  <FileCode className="w-4 h-4" />
-                  <span>Segundo Cerebro Global</span>
-                  <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-600 font-semibold">
+                  <FileCode className={`w-4 h-4 ${activeTab === 'cerebro' ? 'text-white' : 'text-purple-600'}`} />
+                  <span>4. Segundo Cerebro Global</span>
+                  <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+                    activeTab === 'cerebro' ? 'bg-white/20 text-white' : 'bg-purple-200/70 text-purple-800'
+                  }`}>
                     {brainDocs.length}
                   </span>
                 </button>
 
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0 hidden lg:block" />
+
+                {/* Paso 5: Gimnasio de Role-Playing */}
                 <button
                   onClick={() => setActiveTab('gimnasio')}
-                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     activeTab === 'gimnasio'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500 ring-offset-1 translate-y-0.5'
+                      : 'bg-emerald-50/80 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 hover:-translate-y-0.5 shadow-sm'
                   }`}
                 >
-                  <Sliders className="w-4 h-4" />
-                  <span>Gimnasio de Role-Playing</span>
+                  <Sliders className={`w-4 h-4 ${activeTab === 'gimnasio' ? 'text-white' : 'text-emerald-600'}`} />
+                  <span>5. Gimnasio de Role-Playing</span>
                 </button>
 
+                {/* Separador hacia Ajustes */}
+                <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block shrink-0" />
+
+                {/* Ajustes & APIs (Destacado para fácil localización) */}
                 <button
                   onClick={() => setActiveTab('ajustes')}
-                  className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
+                  className={`ml-auto px-4 py-2 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
                     activeTab === 'ajustes'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-900'
+                      ? 'bg-amber-500 text-white border-amber-600 shadow-md shadow-amber-500/30 ring-2 ring-amber-400 ring-offset-1 translate-y-0.5'
+                      : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 hover:border-amber-400 hover:-translate-y-0.5 shadow-sm'
                   }`}
+                  title="Configurar LLMs, API de Gemini, OpenAI, Claude y Ajustes Generales"
                 >
-                  <SettingsIcon className="w-4 h-4" />
-                  <span>Ajustes</span>
+                  <SettingsIcon className={`w-4 h-4 ${activeTab === 'ajustes' ? 'text-white' : 'text-amber-600'}`} />
+                  <span>⚙️ Ajustes (APIs & LLM)</span>
                 </button>
               </div>
 
