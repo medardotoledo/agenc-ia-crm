@@ -1,18 +1,20 @@
-import { MessageSquare, Users, Kanban, Calendar, Bot } from 'lucide-react';
+import { Mail, MessageSquare, CalendarDays, Users, Package, Bot } from 'lucide-react';
 import type { ModuleManifest } from '../types';
 
 /**
  * MÓDULO CRM (espejo estilo GHL)
- * Contactos, pipeline/oportunidades, conversaciones, citas, fábrica de agentes.
+ * Contactos, pipeline/oportunidades, conversaciones, citas, fábrica de agentes, productos & servicios.
  */
 export const crmModule: ModuleManifest = {
   key: 'crm',
   name: 'CRM',
   navGroup: 'CRM',
   nav: [
-    { href: '/admin/leads', label: 'Prospectos / Pipeline', Icon: Kanban },
-    { href: '/admin/conversaciones', label: 'Conversaciones', Icon: MessageSquare },
+    { href: '/admin/leads', label: 'Prospectos', Icon: Users },
+    { href: '/admin/conversaciones', label: 'Inbox', Icon: MessageSquare },
+    { href: '/admin/citas', label: 'Citas', Icon: CalendarDays },
     { href: '/admin/fabrica-agentes', label: 'Fábrica de Agentes', Icon: Bot },
+    { href: '/admin/productos', label: 'Mis Productos & Servicios', Icon: Package },
   ],
   permissions: [
     { key: 'leads.view_all', label: 'Ver todos los prospectos' },

@@ -3,7 +3,7 @@ export type Temperature = 'hot' | 'warm' | 'cold' | 'lost'
 export type NoteType = 'note' | 'call' | 'whatsapp' | 'email'
 export type Channel = 'whatsapp' | 'facebook' | 'instagram' | 'email'
 export type ViewMode = 'tabla' | 'kanban' | 'excel' | 'calendario'
-export type Section = 'dashboard' | 'leads' | 'conversaciones' | 'calendario' | 'reportes' | 'actividades' | 'ajustes'
+export type Section = 'dashboard' | 'leads' | 'conversaciones' | 'calendario' | 'reportes' | 'actividades' | 'ajustes' | 'productos'
 
 export interface Lead {
   id: string
@@ -89,6 +89,25 @@ export interface Pending {
   text: string
   urgency: 'urgente' | 'hoy' | 'mañana' | 'semana'
   when: string
+}
+
+export interface Product {
+  id: string
+  account_id?: string
+  agent_id: string
+  name: string
+  slug?: string
+  short_description?: string
+  target_triggers?: string
+  price_range?: string
+  irresistible_offer?: string
+  knowledge_sheet?: string
+  created_at?: string
+  updated_at?: string
+  agent_name?: string
+  agent_avatar?: string
+  agent_avatar_url?: string
+  agent_role?: string
 }
 
 export * from './database'
