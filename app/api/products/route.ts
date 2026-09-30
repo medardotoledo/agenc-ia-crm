@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     `;
     const params: any[] = [];
     if (accountId && accountId !== 'undefined' && accountId !== 'null') {
-      query += ` WHERE p.account_id = $1 `;
+      query += ` WHERE (p.account_id = $1 OR p.account_id = 'default' OR p.account_id IS NULL) `;
       params.push(accountId);
     }
     query += ` GROUP BY p.id, a_prim.id, a_leg.id ORDER BY p.created_at DESC;`;

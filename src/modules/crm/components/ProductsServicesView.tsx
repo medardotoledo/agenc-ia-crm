@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Search, Plus, Rocket, Edit2, Trash2, Loader2 } from 'lucide-react';
-import { useApp } from '@/store/useApp';
+import { useActiveAccount } from '@/core/account/activeAccount';
 import { useRouter } from 'next/navigation';
 import type { Product } from '@/types';
 
@@ -14,7 +14,7 @@ interface ProductWithAgent extends Product {
 
 export default function ProductsServicesView() {
   const router = useRouter();
-  const { ctx } = useApp();
+  const { account } = useActiveAccount();
   const [products, setProducts] = useState<ProductWithAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,7 +23,8 @@ export default function ProductsServicesView() {
     const loadProducts = async () => {
       try {
         setLoading(true);
-        const url = ctx?.accountId ? `/api/adflow/products?accountId=${ctx.accountId}` : '/api/adflow/products';
+        const accId = account?.id;
+        const url = accId ? `/api/adflow/products?accountId=${accId}` : '/api/adflow/products';
         const response = await fetch(url);
 
         if (!response.ok) throw new Error('Error al cargar productos');
@@ -38,7 +39,7 @@ export default function ProductsServicesView() {
     };
 
     loadProducts();
-  }, [ctx?.accountId]);
+  }, [account?.id]);
 
   const filtered = products.filter((p) =>
     (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
