@@ -18,6 +18,9 @@ dist-ssr
 .env
 .env.*
 .env.local
+*Api Key*
+*.key
+docs/Zernio/*Key*
 
 # Editor directories and files
 .vscode/*
