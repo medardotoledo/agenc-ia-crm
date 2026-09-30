@@ -124,7 +124,7 @@ function AdminShell({ children }: { children: React.ReactNode }) {
                     {g.group}
                   </div>
                   <div className="space-y-0.5">
-                    {g.items.map(({ href, label, Icon }) => {
+                    {g.items.map(({ href, label, Icon, badge }: any) => {
                       const active = pathname === href || (href !== '/admin' && pathname.startsWith(href));
                       return (
                         <Link
@@ -138,6 +138,11 @@ function AdminShell({ children }: { children: React.ReactNode }) {
                         >
                           <Icon size={16} strokeWidth={2.2} />
                           <span className="flex-1">{label}</span>
+                          {badge && (
+                            <span className="rounded-full bg-accent/20 px-1.5 py-0.5 text-[9px] font-bold text-accent tracking-wider">
+                              {badge}
+                            </span>
+                          )}
                         </Link>
                       );
                     })}

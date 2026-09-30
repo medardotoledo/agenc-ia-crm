@@ -18,6 +18,7 @@ export interface ModuleNavItem {
   href: string;
   label: string;
   Icon: LucideIcon;
+  badge?: string;
 }
 
 export interface ModulePermission {

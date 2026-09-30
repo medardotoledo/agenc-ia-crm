@@ -1,9 +1,9 @@
-import { Mail, MessageSquare, CalendarDays, Users, Package, Bot } from 'lucide-react';
+import { Mail, MessageSquare, CalendarDays, Users, Package, Bot, Megaphone } from 'lucide-react';
 import type { ModuleManifest } from '../types';
 
 /**
  * MÓDULO CRM (espejo estilo GHL)
- * Contactos, pipeline/oportunidades, conversaciones, citas, fábrica de agentes, productos & servicios.
+ * Contactos, pipeline/oportunidades, conversaciones, citas, fábrica de agentes, productos & servicios, AdFlow.
  */
 export const crmModule: ModuleManifest = {
   key: 'crm',
@@ -15,6 +15,7 @@ export const crmModule: ModuleManifest = {
     { href: '/admin/citas', label: 'Citas', Icon: CalendarDays },
     { href: '/admin/fabrica-agentes', label: 'Fábrica de Agentes', Icon: Bot },
     { href: '/admin/productos', label: 'Mis Productos & Servicios', Icon: Package },
+    { href: '/admin/adflow', label: 'AdFlow (Smart Ads)', Icon: Megaphone, badge: 'IA' },
   ],
   permissions: [
     { key: 'leads.view_all', label: 'Ver todos los prospectos' },

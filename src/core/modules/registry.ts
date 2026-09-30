@@ -13,8 +13,9 @@ import { crmModule } from './manifests/crm';
 import { inmobiliarioModule } from './manifests/inmobiliario';
 import { adflowModule } from './manifests/adflow';
 
-export const ALL_MODULES: ModuleManifest[] = [crmModule, inmobiliarioModule, adflowModule];
+export const ALL_MODULES: ModuleManifest[] = [crmModule, inmobiliarioModule];
 
 export function getModuleManifest(key: string): ModuleManifest | undefined {
+  if (key === 'adflow') return adflowModule;
   return ALL_MODULES.find((m) => m.key === key);
 }
