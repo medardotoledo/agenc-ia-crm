@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { 
   Home, Megaphone, Wand2, Link2, 
-  Sparkles, CheckCircle2, ChevronRight 
+  Sparkles, CheckCircle2, ChevronRight, Loader2 
 } from 'lucide-react';
 import { useActiveAccount } from '@/core/account/activeAccount';
 import AdFlowDashboard from '@/modules/adflow/components/AdFlowDashboard';
@@ -12,9 +13,12 @@ import AdFlowSingleOverview, { ProductItem } from '@/modules/adflow/components/A
 import CreativeHubView from '@/modules/adflow/components/CreativeHubView';
 import ConnectPlatformsView from '@/modules/adflow/components/ConnectPlatformsView';
 
-export default function AdFlowPage() {
+function AdFlowContent() {
   const { account, loading: accountLoading } = useActiveAccount();
-  
+  const searchParams = useSearchParams();
+  const urlProductId = searchParams.get('productId');
+  const urlAction = searchParams.get('action');
+
   // Pestañas principales de navegación estilo Plai.io
   const [activeMainTab, setActiveMainTab] = useState<'home' | 'advertise' | 'creative' | 'connect'>('home');
   
@@ -24,6 +28,18 @@ export default function AdFlowPage() {
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Canal por defecto (WhatsApp Message Ads)
+  const defaultWhatsAppChannel: ChannelItem = {
+    id: 'whatsapp_messages',
+    name: 'Message Ads (WhatsApp)',
+    category: 'Meta & WhatsApp',
+    description: 'Anuncio en FB e IG con botón directo a WhatsApp atendido por tu Agente IA.',
+    badge: 'Recomendado CRM',
+    iconName: '💬',
+    bgGradient: 'from-emerald-500/20 via-teal-500/10 to-transparent',
+    previewType: 'meta_feed',
+  };
 
   // Cargar productos del CRM / Fábrica de Agentes
   useEffect(() => {
@@ -35,6 +51,20 @@ export default function AdFlowPage() {
         const data = await res.json();
         if (data.products && data.products.length > 0) {
           setProducts(data.products);
+          
+          // Si viene un productId en la URL desde el botón de la sección de Productos de Claude:
+          if (urlProductId) {
+            const found = data.products.find((p: ProductItem) => p.id === urlProductId);
+            if (found) {
+              setSelectedProductId(found.id);
+              setSelectedChannel(defaultWhatsAppChannel);
+              setActiveMainTab('advertise');
+              setToastMessage(`Producto "${found.name}" cargado automáticamente desde tu catálogo.`);
+              setTimeout(() => setToastMessage(null), 4000);
+              return;
+            }
+          }
+
           setSelectedProductId(data.products[0].id);
         } else {
           // Si no hay productos aún en la base de datos, proveer uno de demostración
@@ -59,7 +89,7 @@ export default function AdFlowPage() {
     }
 
     loadProducts();
-  }, [account?.id]);
+  }, [account?.id, urlProductId]);
 
   const handleSelectChannel = (channel: ChannelItem) => {
     setSelectedChannel(channel);
@@ -203,5 +233,13 @@ export default function AdFlowPage() {
 
       {activeMainTab === 'connect' && <ConnectPlatformsView />}
     </div>
+  );
+}
+
+export default function AdFlowPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-xs font-semibold text-ink-soft">Cargando AdFlow...</div>}>
+      <AdFlowContent />
+    </Suspense>
   );
 }

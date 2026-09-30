@@ -123,11 +123,31 @@ export default function AdFlowSingleOverview({
 
   const handleConfirmLaunch = async () => {
     setIsLaunching(true);
-    // Simular lanzamiento seguro en el VPS
-    await new Promise((r) => setTimeout(r, 1200));
-    setIsLaunching(false);
-    setShowConfirmModal(false);
-    onLaunchSuccess();
+    try {
+      await fetch('/api/adflow/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${currentProduct?.name || 'Campaña'} - ${channel.name}`,
+          productId: selectedProductId,
+          platform: channel.previewType === 'tiktok' ? 'tiktok' : channel.previewType === 'google_search' ? 'google' : 'whatsapp',
+          budgetDaily: budgetDaily,
+          headline: headline,
+          bodyText: bodyText,
+          ctaText: ctaText,
+          mediaUrl: mediaUrl,
+          destinationUrl: 'https://adflow.online',
+          targetingInterests: interests,
+          targetingLocations: locations,
+        }),
+      });
+    } catch (launchErr) {
+      console.warn('Error guardando en BD:', launchErr);
+    } finally {
+      setIsLaunching(false);
+      setShowConfirmModal(false);
+      onLaunchSuccess();
+    }
   };
 
   return (

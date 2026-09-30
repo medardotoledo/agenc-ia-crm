@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Play, Pause, Plus, TrendingUp, Calendar, 
   BarChart3, ExternalLink, Trash2, Edit2, MessageCircle 
@@ -74,12 +74,51 @@ export default function AdFlowDashboard({ onStartNewAd }: AdFlowDashboardProps) 
   const [activeTab, setActiveTab] = useState<'recent' | 'performance' | 'drafts'>('recent');
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>(MOCK_CAMPAIGNS);
 
-  const toggleCampaignStatus = (id: string) => {
-    setCampaigns((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, status: c.status === 'active' ? 'paused' : 'active' } : c
-      )
-    );
+  useEffect(() => {
+    async function loadCampaigns() {
+      try {
+        const res = await fetch('/api/adflow/campaigns');
+        const data = await res.json();
+        if (data.campaigns && data.campaigns.length > 0) {
+          const mapped: CampaignSummary[] = data.campaigns.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            platform: c.platform,
+            status: c.status,
+            budget_daily: Number(c.budget_daily),
+            spend: Number(c.spend),
+            impressions: c.impressions,
+            clicks: c.clicks,
+            leads: c.leads,
+            media_url: c.media_url,
+            destination_url: c.destination_url,
+            start_date: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : '2026-09-29',
+          }));
+          setCampaigns(mapped);
+        }
+      } catch (err) {
+        console.warn('Error cargando campañas:', err);
+      }
+    }
+    loadCampaigns();
+  }, []);
+
+  const toggleCampaignStatus = async (id: string) => {
+    const camp = campaigns.find((c) => c.id === id);
+    if (!camp) return;
+    const nextStatus = camp.status === 'active' ? 'paused' : 'active';
+    try {
+      await fetch('/api/adflow/campaigns', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: nextStatus }),
+      });
+      setCampaigns((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: nextStatus } : c))
+      );
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const totalSpend = campaigns.reduce((acc, c) => acc + c.spend, 0);
