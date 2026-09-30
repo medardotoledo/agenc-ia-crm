@@ -2,7 +2,16 @@ import { NextResponse } from 'next/server';
 
 const ZERNIO_BASE_URL = 'https://zernio.com/api/v1';
 
-function getApiKey(): string | null {
+function getApiKey(req?: Request): string | null {
+  if (req) {
+    const customHeader = req.headers.get('x-zernio-api-key');
+    if (customHeader && customHeader.trim()) return customHeader.trim();
+    try {
+      const url = new URL(req.url);
+      const customParam = url.searchParams.get('customApiKey');
+      if (customParam && customParam.trim()) return customParam.trim();
+    } catch {}
+  }
   return process.env.ZERNIO_API_KEY || null;
 }
 
@@ -52,7 +61,7 @@ async function getOrCreateProfileId(apiKey: string): Promise<string> {
 // GET: Consultar estado o generar URL de autorización OAuth
 export async function GET(req: Request) {
   try {
-    const apiKey = getApiKey();
+    const apiKey = getApiKey(req);
     if (!apiKey) {
       return NextResponse.json({
         configured: false,
@@ -162,7 +171,7 @@ export async function GET(req: Request) {
 // DELETE: Desconectar una cuenta vinculada en Zernio
 export async function DELETE(req: Request) {
   try {
-    const apiKey = getApiKey();
+    const apiKey = getApiKey(req);
     if (!apiKey) {
       return NextResponse.json({ error: 'ZERNIO_API_KEY no configurada' }, { status: 400 });
     }
@@ -200,7 +209,7 @@ export async function DELETE(req: Request) {
 // POST: Publicar campaña publicitaria unificada a través de Zernio
 export async function POST(req: Request) {
   try {
-    const apiKey = getApiKey();
+    const apiKey = getApiKey(req);
     if (!apiKey) {
       return NextResponse.json({ error: 'ZERNIO_API_KEY no configurada' }, { status: 400 });
     }

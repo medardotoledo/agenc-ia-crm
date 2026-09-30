@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   CheckCircle2, AlertCircle, ExternalLink, 
-  RefreshCw, Zap, ShieldCheck, Trash2, Loader2 
+  RefreshCw, Zap, ShieldCheck, Trash2, Loader2,
+  Key, Sparkles, HelpCircle
 } from 'lucide-react';
+import { useActiveAccount } from '@/core/account/activeAccount';
 
 interface PlatformAccount {
   _id?: string;
@@ -36,6 +38,7 @@ interface ZernioStatusResponse {
 }
 
 export default function ConnectPlatformsView() {
+  const { account } = useActiveAccount();
   const [loading, setLoading] = useState(true);
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
@@ -43,11 +46,29 @@ export default function ConnectPlatformsView() {
   const [error, setError] = useState<string | null>(null);
   const [infoToast, setInfoToast] = useState<string | null>(null);
 
-  const fetchStatus = async () => {
+  // Soporte para clave personalizada de cliente / subcuenta
+  const [showKeyConfig, setShowKeyConfig] = useState(false);
+  const [customKeyInput, setCustomKeyInput] = useState('');
+  const [hasCustomKey, setHasCustomKey] = useState(false);
+
+  const storageKey = `zernio_custom_key_${account?.id || 'default'}`;
+
+  const getActiveHeaders = useCallback((): HeadersInit => {
+    const custom = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+    const headers: Record<string, string> = {};
+    if (custom && custom.trim()) {
+      headers['x-zernio-api-key'] = custom.trim();
+    }
+    return headers;
+  }, [storageKey]);
+
+  const fetchStatus = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/adflow/zernio?action=status');
+      const res = await fetch('/api/adflow/zernio?action=status', {
+        headers: getActiveHeaders(),
+      });
       const json: ZernioStatusResponse = await res.json();
       if (!res.ok) {
         throw new Error(json.error || 'Error al consultar Zernio API');
@@ -59,11 +80,46 @@ export default function ConnectPlatformsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getActiveHeaders]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        setCustomKeyInput(stored);
+        setHasCustomKey(true);
+      } else {
+        setCustomKeyInput('');
+        setHasCustomKey(false);
+      }
+    }
     fetchStatus();
-  }, []);
+  }, [account?.id, storageKey, fetchStatus]);
+
+  const handleSaveCustomKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customKeyInput.trim()) {
+      localStorage.removeItem(storageKey);
+      setHasCustomKey(false);
+      setInfoToast('Usando API Key global del servidor.');
+    } else {
+      localStorage.setItem(storageKey, customKeyInput.trim());
+      setHasCustomKey(true);
+      setInfoToast('API Key personalizada guardada para esta subcuenta.');
+    }
+    setShowKeyConfig(false);
+    setTimeout(() => setInfoToast(null), 3500);
+    fetchStatus();
+  };
+
+  const handleRemoveCustomKey = () => {
+    localStorage.removeItem(storageKey);
+    setCustomKeyInput('');
+    setHasCustomKey(false);
+    setInfoToast('Restablecida la API Key global del servidor.');
+    setTimeout(() => setInfoToast(null), 3500);
+    fetchStatus();
+  };
 
   const handleConnect = async (platform: 'meta' | 'google' | 'tiktok') => {
     try {
@@ -72,7 +128,10 @@ export default function ConnectPlatformsView() {
 
       const redirectUrl = `${window.location.origin}/admin/adflow?tab=connect&connected=${platform}`;
       const res = await fetch(
-        `/api/adflow/zernio?action=connect&platform=${platform}&redirectUrl=${encodeURIComponent(redirectUrl)}`
+        `/api/adflow/zernio?action=connect&platform=${platform}&redirectUrl=${encodeURIComponent(redirectUrl)}`,
+        {
+          headers: getActiveHeaders(),
+        }
       );
       const resData = await res.json();
 
@@ -80,7 +139,7 @@ export default function ConnectPlatformsView() {
         throw new Error(resData.error || 'No se pudo generar la URL de autenticación');
       }
 
-      setInfoToast(`Abriendo ventana de autorización segura para ${platform.toUpperCase()}...`);
+      setInfoToast(`Abriendo ventana de inicio de sesión seguro para ${platform.toUpperCase()}...`);
       setTimeout(() => setInfoToast(null), 5000);
 
       // Abrir en ventana emergente (popup)
@@ -105,7 +164,6 @@ export default function ConnectPlatformsView() {
           }
         }, 1200);
       } else {
-        // Si el navegador bloqueó el popup, redirigir en la misma pestaña
         window.location.href = resData.authUrl;
       }
     } catch (err: any) {
@@ -121,6 +179,7 @@ export default function ConnectPlatformsView() {
       setDisconnectingId(accountId);
       const res = await fetch(`/api/adflow/zernio?accountId=${accountId}`, {
         method: 'DELETE',
+        headers: getActiveHeaders(),
       });
       if (!res.ok) {
         const errJson = await res.json();
@@ -167,6 +226,35 @@ export default function ConnectPlatformsView() {
         </div>
       </div>
 
+      {/* BANNER EDUCATIVO: TIER GRATIS DE 2 CUENTAS PARA CLIENTES */}
+      <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent border border-emerald-500/20 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl p-2 bg-emerald-500/10 rounded-2xl shrink-0">🎁</span>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-emerald-800 dark:text-emerald-300 text-sm">
+                Plan Gratuito Zernio: Hasta 2 Cuentas $0 USD/mes
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                Sin tarjeta
+              </span>
+            </div>
+            <p className="text-ink-soft text-[11px] mt-0.5 leading-relaxed">
+              Cada cliente o negocio puede abrir su cuenta gratuita en Zernio, vincular sus redes (ej. Facebook Ads) y colocar su propia API Key sin generar costo para la agencia.
+            </p>
+          </div>
+        </div>
+
+        <a
+          href="https://zernio.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shrink-0 transition-all shadow-xs"
+        >
+          Crear cuenta en Zernio <ExternalLink size={12} />
+        </a>
+      </div>
+
       {/* Alerta de Error si ocurre */}
       {error && (
         <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
@@ -184,38 +272,88 @@ export default function ConnectPlatformsView() {
       )}
 
       {/* Tarjeta de Orquestador Zernio API */}
-      <div className="p-5 rounded-3xl border border-line bg-card shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-            <Zap size={20} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-ink">Orquestador Zernio Ads API</h3>
-              {data?.configured ? (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                  <CheckCircle2 size={10} /> Activo & Certificado
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                  Pendiente de Clave
-                </span>
-              )}
+      <div className="p-5 rounded-3xl border border-line bg-card shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Zap size={20} />
             </div>
-            <p className="text-[11px] text-ink-soft mt-0.5">
-              Profile ID: <code className="text-ink font-mono text-[10px]">{data?.profileId || '6a1a...14a'}</code>
-              {data?.apiKeyMasked && (
-                <> • Key: <code className="text-ink font-mono text-[10px]">{data.apiKeyMasked}</code></>
-              )}
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-ink">Orquestador Zernio Ads API</h3>
+                {data?.configured ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                    <CheckCircle2 size={10} /> Activo & Certificado
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    Pendiente de Clave
+                  </span>
+                )}
+                {hasCustomKey && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    Clave de Cliente
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-ink-soft mt-0.5">
+                Profile ID: <code className="text-ink font-mono text-[10px]">{data?.profileId || '6a1a...14a'}</code>
+                {data?.apiKeyMasked && (
+                  <> • Key: <code className="text-ink font-mono text-[10px]">{data.apiKeyMasked}</code></>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowKeyConfig(!showKeyConfig)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-line bg-soft hover:bg-line text-ink flex items-center gap-1.5 transition-colors"
+            >
+              <Key size={13} />
+              {showKeyConfig ? 'Cerrar Ajustes' : 'Configurar Clave Propia'}
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1 bg-emerald-50/50 px-2.5 py-1 rounded-xl border border-emerald-100">
-            <ShieldCheck size={13} /> Multi-Red Sync
-          </span>
-        </div>
+        {/* Panel Desplegable para que el cliente ingrese su propia API Key de Zernio */}
+        {showKeyConfig && (
+          <form onSubmit={handleSaveCustomKey} className="p-4 rounded-2xl bg-soft/60 border border-line space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-ink flex items-center gap-1.5">
+                <Sparkles size={14} className="text-primary" /> API Key Personalizada de Zernio (Subcuenta: {account?.name || 'Actual'})
+              </span>
+              {hasCustomKey && (
+                <button
+                  type="button"
+                  onClick={handleRemoveCustomKey}
+                  className="text-[11px] text-rose-600 hover:underline"
+                >
+                  Restablecer a Clave de Agencia
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-ink-soft">
+              Pega aquí la API Key generada desde tu cuenta personal de Zernio (`sk_...`). Las campañas y conexiones se asociarán a tu propia cuenta gratuita.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                value={customKeyInput}
+                onChange={(e) => setCustomKeyInput(e.target.value)}
+                placeholder="sk_ea31e60..."
+                className="flex-1 text-xs font-mono rounded-xl border border-line bg-card p-2.5 text-ink focus:outline-none focus:border-primary"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-light text-white text-xs font-bold shadow-xs transition-colors shrink-0"
+              >
+                Guardar Clave
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Grid de Redes Publicitarias */}
