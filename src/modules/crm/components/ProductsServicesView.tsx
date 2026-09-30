@@ -140,20 +140,36 @@ function ProductCard({ product, onLaunchAd, onEdit, onDelete }: ProductCardProps
       {/* Header con nombre y acciones */}
       <div className="mb-4 flex items-start justify-between">
         <div className="flex-1">
-          <h3 className="font-semibold text-ink">{product.name}</h3>
-          <p className="text-xs text-ink-soft">Producto / Servicio</p>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-ink">{product.name}</h3>
+            {product.knowledge_sheet ? (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                ✓ Ficha Lista
+              </span>
+            ) : (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                ⚡ Ficha Pendiente
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-ink-soft">Producto / Servicio</p>
+            {product.price_range && (
+              <span className="text-xs font-semibold text-primary">· {product.price_range}</span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => onEdit(product.id)}
-            className="p-1.5 text-ink-soft transition-colors hover:bg-line hover:text-ink rounded"
-            title="Editar"
+            className="p-1.5 text-ink-soft transition-colors hover:bg-line hover:text-ink rounded cursor-pointer"
+            title="Abrir Estudio / Editar"
           >
             <Edit2 className="h-4 w-4" />
           </button>
           <button
             onClick={() => onDelete(product.id)}
-            className="p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-500 rounded"
+            className="p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-500 rounded cursor-pointer"
             title="Eliminar"
           >
             <Trash2 className="h-4 w-4" />
@@ -163,30 +179,39 @@ function ProductCard({ product, onLaunchAd, onEdit, onDelete }: ProductCardProps
 
       {/* Oferta Irresistible */}
       {product.irresistible_offer && (
-        <div className="mb-4 rounded-md bg-app-light p-3">
-          <p className="text-xs font-semibold text-ink-soft mb-1">
-            📢 Oferta Irresistible
+        <div className="mb-4 rounded-xl bg-app-light p-3 border border-line">
+          <p className="text-xs font-semibold text-ink-soft mb-1 flex items-center gap-1.5">
+            📢 Oferta Irresistible Hormozi
           </p>
-          <p className="text-sm text-ink line-clamp-2">
-            {product.irresistible_offer}
+          <p className="text-sm text-ink line-clamp-2 italic">
+            &ldquo;{product.irresistible_offer}&rdquo;
           </p>
         </div>
       )}
 
       {/* Agente asignado */}
       {product.agent_name && (
-        <div className="mb-4 flex items-center gap-2 rounded-md bg-app-light p-3">
-          {avatar && (
-            <img
-              src={avatar}
-              alt={product.agent_name}
-              className="h-8 w-8 rounded-full object-cover"
-            />
-          )}
-          <div className="text-xs">
-            <p className="font-semibold text-ink-soft">Agente Asignado</p>
-            <p className="text-ink">{product.agent_name}</p>
+        <div className="mb-4 flex items-center justify-between rounded-xl bg-app-light p-2.5 border border-line">
+          <div className="flex items-center gap-2">
+            {avatar && (
+              <img
+                src={avatar}
+                alt={product.agent_name}
+                className="h-7 w-7 rounded-full object-cover"
+              />
+            )}
+            <div className="text-xs">
+              <p className="font-semibold text-ink">{product.agent_name}</p>
+              <p className="text-[11px] text-ink-soft">{product.agent_role || 'Agente de Ventas'}</p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => onEdit(product.id)}
+            className="text-[11px] font-bold text-primary hover:underline"
+          >
+            Estudio IA →
+          </button>
         </div>
       )}
 

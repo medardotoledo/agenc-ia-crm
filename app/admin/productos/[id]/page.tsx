@@ -65,19 +65,7 @@ export default function EditProductoPage() {
   }
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-3 mb-2">
-          <Edit2 className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-ink">Editar Producto</h1>
-        </div>
-        <p className="text-sm text-ink-soft">
-          Actualiza la información de <span className="font-semibold text-ink">{product.name}</span>
-        </p>
-      </div>
-
-      {/* Form */}
+    <div className="space-y-4">
       <ProductForm product={product} isEditing={true} />
     </div>
   );
