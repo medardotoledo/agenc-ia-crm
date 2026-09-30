@@ -1,13 +1,17 @@
-﻿import { Users, DollarSign, Target, Flame, Phone, MessageCircle, Mail as MailIcon, UserPlus } from 'lucide-react'
-import { useApp, useLeads } from '@/store/useApp'
-import { Card } from '@/modules/crm/components/ui'
-import { STAGE_META, money } from '@/lib/data/mock'
-import type { Stage } from '@/types'
+'use client';
+
+import { useState } from 'react';
+import { Users, DollarSign, Target, Flame, Phone, MessageCircle, Mail as MailIcon, UserPlus, ShieldCheck, BarChart3 } from 'lucide-react';
+import { useApp, useLeads } from '@/store/useApp';
+import { useActiveAccount } from '@/core/account/activeAccount';
+import { Card } from '@/modules/crm/components/ui';
+import { STAGE_META, money } from '@/lib/data/mock';
+import type { Stage } from '@/types';
+import { AgentAccountabilityScorecard } from '@/modules/crm/components/AgentAccountabilityScorecard';
 
 /**
- * Dashboard del CRM â€” mÃ©tricas REALES calculadas desde los leads cargados
- * de la subcuenta activa. No se muestran datos que aÃºn no tenemos
- * (histÃ³rico semanal, ranking de equipo, tareas) para evitar cifras falsas.
+ * Dashboard del CRM — métricas REALES calculadas desde los leads cargados
+ * de la subcuenta activa, más el Scorecard de Auditoría del Pipeline Agent.
  */
 
 function Metric({ Icon, label, value }: { Icon: typeof Users; label: string; value: string }) {
@@ -18,45 +22,84 @@ function Metric({ Icon, label, value }: { Icon: typeof Users; label: string; val
       </div>
       <div className="mt-1 text-3xl font-bold tracking-tight">{value}</div>
     </Card>
-  )
+  );
 }
 
-const STAGE_ORDER: Stage[] = ['nuevo', 'contactado', 'propuesta', 'cierre', 'perdido']
-const SOURCE_COLORS = ['#2563eb', '#f59e0b', '#16a34a', '#e1306c', '#7c3aed', '#0ea5e9', '#64748b']
-const ACT_ICON = { call: Phone, whatsapp: MessageCircle, email: MailIcon, note: UserPlus } as const
-const ACT_COLOR = { call: 'bg-call-bg text-call-text', whatsapp: 'bg-wa-bg text-wa-text', email: 'bg-mail-bg text-mail-text', note: 'bg-note-bg text-note-text' } as const
+const STAGE_ORDER: Stage[] = ['nuevo', 'contactado', 'propuesta', 'cierre', 'perdido'];
+const SOURCE_COLORS = ['#2563eb', '#f59e0b', '#16a34a', '#e1306c', '#7c3aed', '#0ea5e9', '#64748b'];
+const ACT_ICON = { call: Phone, whatsapp: MessageCircle, email: MailIcon, note: UserPlus } as const;
+const ACT_COLOR = { call: 'bg-call-bg text-call-text', whatsapp: 'bg-wa-bg text-wa-text', email: 'bg-mail-bg text-mail-text', note: 'bg-note-bg text-note-text' } as const;
 
 export default function Dashboard() {
-  const { me, notes } = useApp()
-  const stageLabels = useApp((s) => s.stageLabels)
-  const { leads } = useLeads()
-  const firstName = (me?.name ?? 'Usuario').split(' ')[0]
+  const { me, notes } = useApp();
+  const { account } = useActiveAccount();
+  const stageLabels = useApp((s) => s.stageLabels);
+  const { leads } = useLeads();
+  const firstName = (me?.name ?? 'Usuario').split(' ')[0];
+  const [activeTab, setActiveTab] = useState<'metrics' | 'auditoria'>('metrics');
 
-  // ---- MÃ©tricas reales ----
-  const total = leads.length
-  const pipelineValue = leads.reduce((a, l) => a + (l.value || 0), 0)
-  const hot = leads.filter((l) => l.temperature === 'hot').length
-  const won = leads.filter((l) => l.stage === 'cierre').length
-  const lost = leads.filter((l) => l.stage === 'perdido').length
-  const closeRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0
+  // ---- Métricas reales ----
+  const total = leads.length;
+  const pipelineValue = leads.reduce((a, l) => a + (l.value || 0), 0);
+  const hot = leads.filter((l) => l.temperature === 'hot').length;
+  const won = leads.filter((l) => l.stage === 'cierre').length;
+  const lost = leads.filter((l) => l.stage === 'perdido').length;
+  const closeRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0;
 
-  const stageCounts = STAGE_ORDER.map((s) => ({ stage: s, count: leads.filter((l) => l.stage === s).length }))
-  const maxStage = Math.max(1, ...stageCounts.map((s) => s.count))
+  const stageCounts = STAGE_ORDER.map((s) => ({ stage: s, count: leads.filter((l) => l.stage === s).length }));
+  const maxStage = Math.max(1, ...stageCounts.map((s) => s.count));
 
   // Por fuente
-  const bySource = new Map<string, number>()
-  for (const l of leads) bySource.set(l.source || 'Otro', (bySource.get(l.source || 'Otro') ?? 0) + 1)
-  const sources = [...bySource.entries()].map(([label, value], i) => ({ label, value, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }))
-  const sourceTotal = sources.reduce((a, s) => a + s.value, 0) || 1
+  const bySource = new Map<string, number>();
+  for (const l of leads) bySource.set(l.source || 'Otro', (bySource.get(l.source || 'Otro') ?? 0) + 1);
+  const sources = [...bySource.entries()].map(([label, value], i) => ({ label, value, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+  const sourceTotal = sources.reduce((a, s) => a + s.value, 0) || 1;
 
   return (
-    <div className="animate-rise space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Hola, {firstName}</h1>
-        <p className="text-sm text-ink-soft">Resumen de tu pipeline</p>
+    <div className="animate-rise space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Hola, {firstName}</h1>
+          <p className="text-sm text-ink-soft">Control Operativo y Auditoría de Ventas</p>
+        </div>
+
+        {/* Selector de Pestañas */}
+        <div className="flex items-center gap-1.5 bg-soft p-1 rounded-xl border border-line-soft">
+          <button
+            type="button"
+            onClick={() => setActiveTab('metrics')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'metrics'
+                ? 'bg-primary text-inverse shadow-sm'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            <BarChart3 size={14} />
+            <span>Métricas de Pipeline</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('auditoria')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'auditoria'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            <ShieldCheck size={14} />
+            <span>🤖 Auditoría & IA (Pipeline Agent)</span>
+          </button>
+        </div>
       </div>
 
-      {/* MÃ©tricas */}
+      {activeTab === 'auditoria' ? (
+        account?.id ? (
+          <AgentAccountabilityScorecard accountId={account.id} />
+        ) : (
+          <div className="p-8 text-center text-ink-soft">Selecciona una subcuenta activa para ver su auditoría.</div>
+        )
+      ) : (
+        <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Metric Icon={Users} label="Total leads" value={String(total)} />
         <Metric Icon={DollarSign} label="Valor del pipeline" value={money(pipelineValue).replace(',000', 'k')} />
@@ -125,7 +168,9 @@ export default function Dashboard() {
           </div>
         )}
       </Card>
-    </div>
-  )
+      </div>
+    )}
+  </div>
+  );
 }
 
