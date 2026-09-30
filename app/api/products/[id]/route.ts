@@ -7,7 +7,7 @@ const pool = new Pool({
 
 /**
  * GET /api/products/[id]
- * Obtiene un producto específico por ID con info del agente
+ * Obtiene un producto específico con su lista de agentes asignados (Muchos a Muchos)
  */
 export async function GET(
   request: NextRequest,
@@ -27,12 +27,30 @@ export async function GET(
     const result = await client.query(
       `SELECT 
          p.*,
-         a.name AS agent_name,
-         a.role AS agent_role,
-         a.avatar_url AS agent_avatar_url
+         COALESCE(a_prim.name, a_leg.name, 'Agente Asignado') AS agent_name,
+         COALESCE(a_prim.role, a_leg.role) AS agent_role,
+         COALESCE(a_prim.avatar_url, a_leg.avatar_url) AS agent_avatar_url,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'agent_id', a_all.id,
+               'name', a_all.name,
+               'role', a_all.role,
+               'avatar_url', a_all.avatar_url,
+               'is_primary', asgn.is_primary
+             )
+           ) FILTER (WHERE a_all.id IS NOT NULL),
+           '[]'
+         ) AS assigned_agents
        FROM ai_agent_products p
-       LEFT JOIN ai_agents a ON a.id = p.agent_id
-       WHERE p.id = $1`,
+       LEFT JOIN ai_agent_product_assignments asgn ON asgn.product_id = p.id
+       LEFT JOIN ai_agents a_all ON a_all.id = asgn.agent_id
+       LEFT JOIN ai_agents a_prim ON a_prim.id = (
+         SELECT agent_id FROM ai_agent_product_assignments WHERE product_id = p.id AND is_primary = true LIMIT 1
+       )
+       LEFT JOIN ai_agents a_leg ON a_leg.id = p.agent_id
+       WHERE p.id = $1
+       GROUP BY p.id, a_prim.id, a_leg.id`,
       [id]
     );
 
@@ -57,7 +75,7 @@ export async function GET(
 
 /**
  * PUT /api/products/[id]
- * Actualiza un producto existente
+ * Actualiza un producto y sincroniza sus agentes asignados (Muchos a Muchos)
  */
 export async function PUT(
   request: NextRequest,
@@ -75,6 +93,8 @@ export async function PUT(
       price_range,
       knowledge_sheet,
       agent_id,
+      assigned_agent_ids,
+      primary_agent_id,
     } = body;
 
     if (!id) {
@@ -91,16 +111,9 @@ export async function PUT(
       );
     }
 
-    if (!agent_id) {
-      return NextResponse.json(
-        { error: 'Debes seleccionar un agente' },
-        { status: 400 }
-      );
-    }
-
     // Verificar que el producto existe
     const productCheck = await client.query(
-      'SELECT id FROM ai_agent_products WHERE id = $1',
+      'SELECT id, agent_id FROM ai_agent_products WHERE id = $1',
       [id]
     );
 
@@ -111,17 +124,51 @@ export async function PUT(
       );
     }
 
-    // Verificar que el agente existe en ai_agents
-    const agentCheck = await client.query(
-      'SELECT id FROM ai_agents WHERE id = $1',
-      [agent_id]
-    );
+    // Determinar el agente principal
+    let effectivePrimaryAgentId = primary_agent_id || agent_id || null;
 
-    if (agentCheck.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Agente no encontrado' },
-        { status: 404 }
+    // Procesar asignaciones Muchos a Muchos si se proporcionaron
+    if (Array.isArray(assigned_agent_ids)) {
+      await client.query('BEGIN');
+
+      // Limpiar asignaciones previas
+      await client.query(
+        'DELETE FROM ai_agent_product_assignments WHERE product_id = $1',
+        [id]
       );
+
+      // Si no se especificó primary pero hay agentes, el primero es primary
+      if (!effectivePrimaryAgentId && assigned_agent_ids.length > 0) {
+        const first = assigned_agent_ids[0];
+        effectivePrimaryAgentId = typeof first === 'string' ? first : first.agent_id;
+      }
+
+      for (const item of assigned_agent_ids) {
+        const currentAgentId = typeof item === 'string' ? item : item.agent_id;
+        const isPrimary = typeof item === 'object' && item.is_primary !== undefined 
+          ? Boolean(item.is_primary) 
+          : currentAgentId === effectivePrimaryAgentId;
+
+        if (currentAgentId) {
+          await client.query(
+            `INSERT INTO ai_agent_product_assignments (product_id, agent_id, is_primary)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (product_id, agent_id) DO UPDATE SET is_primary = $3`,
+            [id, currentAgentId, isPrimary]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+    } else if (agent_id) {
+      // Formato legacy de un solo agente
+      await client.query(
+        `INSERT INTO ai_agent_product_assignments (product_id, agent_id, is_primary)
+         VALUES ($1, $2, true)
+         ON CONFLICT (product_id, agent_id) DO UPDATE SET is_primary = true`,
+        [id, agent_id]
+      );
+      effectivePrimaryAgentId = agent_id;
     }
 
     const result = await client.query(
@@ -132,7 +179,7 @@ export async function PUT(
            target_triggers = $4,
            price_range = $5,
            knowledge_sheet = $6,
-           agent_id = $7,
+           agent_id = COALESCE($7, agent_id),
            updated_at = NOW()
        WHERE id = $8
        RETURNING *`,
@@ -143,7 +190,7 @@ export async function PUT(
         target_triggers?.trim() || null,
         price_range?.trim() || null,
         knowledge_sheet?.trim() || null,
-        agent_id,
+        effectivePrimaryAgentId,
         id,
       ]
     );
@@ -153,6 +200,7 @@ export async function PUT(
       { status: 200 }
     );
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Database error in /api/products/[id] PUT:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
@@ -165,7 +213,7 @@ export async function PUT(
 
 /**
  * DELETE /api/products/[id]
- * Elimina un producto
+ * Elimina un producto y sus asignaciones en cascada
  */
 export async function DELETE(
   request: NextRequest,

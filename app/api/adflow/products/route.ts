@@ -22,21 +22,38 @@ export async function GET(req: Request) {
         p.market_intel_data,
         p.offer_interview_data,
         p.created_at,
-        a.name AS agent_name,
-        a.role AS agent_role,
-        a.avatar_url AS agent_avatar_url,
-        a.target_channel AS agent_channel
+        COALESCE(a_prim.name, a_leg.name, 'Agente Asignado') AS agent_name,
+        COALESCE(a_prim.role, a_leg.role) AS agent_role,
+        COALESCE(a_prim.avatar_url, a_leg.avatar_url) AS agent_avatar_url,
+        COALESCE(a_prim.target_channel, a_leg.target_channel, 'whatsapp') AS agent_channel,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'agent_id', a_all.id,
+              'name', a_all.name,
+              'role', a_all.role,
+              'avatar_url', a_all.avatar_url,
+              'is_primary', asgn.is_primary
+            )
+          ) FILTER (WHERE a_all.id IS NOT NULL),
+          '[]'
+        ) AS assigned_agents
       FROM ai_agent_products p
-      JOIN ai_agents a ON a.id = p.agent_id
+      LEFT JOIN ai_agent_product_assignments asgn ON asgn.product_id = p.id
+      LEFT JOIN ai_agents a_all ON a_all.id = asgn.agent_id
+      LEFT JOIN ai_agents a_prim ON a_prim.id = (
+        SELECT agent_id FROM ai_agent_product_assignments WHERE product_id = p.id AND is_primary = true LIMIT 1
+      )
+      LEFT JOIN ai_agents a_leg ON a_leg.id = p.agent_id
     `;
 
     const params: any[] = [];
     if (accountId && accountId !== 'undefined' && accountId !== 'null') {
-      query += ` WHERE a.account_id = $1 `;
+      query += ` WHERE p.account_id = $1 `;
       params.push(accountId);
     }
 
-    query += ` ORDER BY p.created_at DESC;`;
+    query += ` GROUP BY p.id, a_prim.id, a_leg.id ORDER BY p.created_at DESC;`;
 
     const { rows: products } = await pool.query(query, params);
 

@@ -91,10 +91,18 @@ export interface Pending {
   when: string
 }
 
+export interface AssignedAgent {
+  agent_id: string
+  name: string
+  role?: string
+  avatar_url?: string
+  is_primary?: boolean
+}
+
 export interface Product {
   id: string
   account_id?: string
-  agent_id: string
+  agent_id?: string
   name: string
   slug?: string
   short_description?: string
@@ -108,6 +116,7 @@ export interface Product {
   agent_avatar?: string
   agent_avatar_url?: string
   agent_role?: string
+  assigned_agents?: AssignedAgent[]
 }
 
 export * from './database'

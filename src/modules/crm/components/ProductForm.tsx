@@ -142,6 +142,7 @@ export default function ProductForm({ product, isEditing = false }: ProductFormP
 
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(true);
+  const [assignedAgents, setAssignedAgents] = useState<Array<{ agent_id: string; is_primary: boolean }>>([]);
   const [savingBasic, setSavingBasic] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -218,8 +219,9 @@ export default function ProductForm({ product, isEditing = false }: ProductFormP
         const list = data.agents || [];
         setAgents(list);
 
-        // Si es nuevo y no tiene agente seleccionado, predeterminar el primero
-        if (!product?.agent_id && list.length > 0) {
+        // Si es nuevo y no tiene agentes asignados, predeterminar el primero como principal
+        if (!product?.id && list.length > 0) {
+          setAssignedAgents([{ agent_id: list[0].id, is_primary: true }]);
           setFormData((prev) => ({ ...prev, agent_id: prev.agent_id || list[0].id }));
         }
       } catch (err: any) {
@@ -230,9 +232,9 @@ export default function ProductForm({ product, isEditing = false }: ProductFormP
     };
 
     loadAgents();
-  }, [product?.agent_id]);
+  }, [product?.id]);
 
-  // Sincronizar formData si cambia product
+  // Sincronizar formData y assignedAgents si cambia product
   useEffect(() => {
     if (product) {
       setFormData({
@@ -244,8 +246,44 @@ export default function ProductForm({ product, isEditing = false }: ProductFormP
         knowledge_sheet: product.knowledge_sheet || '',
         agent_id: product.agent_id || '',
       });
+
+      if (product.assigned_agents && product.assigned_agents.length > 0) {
+        setAssignedAgents(
+          product.assigned_agents.map((a) => ({
+            agent_id: a.agent_id,
+            is_primary: Boolean(a.is_primary),
+          }))
+        );
+      } else if (product.agent_id) {
+        setAssignedAgents([{ agent_id: product.agent_id, is_primary: true }]);
+      }
     }
   }, [product]);
+
+  const handleToggleAgent = (agentId: string) => {
+    setAssignedAgents((prev) => {
+      const exists = prev.some((a) => a.agent_id === agentId);
+      if (exists) {
+        const filtered = prev.filter((a) => a.agent_id !== agentId);
+        if (filtered.length > 0 && !filtered.some((a) => a.is_primary)) {
+          filtered[0].is_primary = true;
+        }
+        return filtered;
+      } else {
+        const isFirst = prev.length === 0;
+        return [...prev, { agent_id: agentId, is_primary: isFirst }];
+      }
+    });
+  };
+
+  const handleSetPrimaryAgent = (agentId: string) => {
+    setAssignedAgents((prev) =>
+      prev.map((a) => ({
+        ...a,
+        is_primary: a.agent_id === agentId,
+      }))
+    );
+  };
 
   // Cargar detalles de archivos y estado de oferta cuando existe product
   const loadProductFilesAndStrategy = async (agentId: string, prodId: string) => {
@@ -303,8 +341,13 @@ export default function ProductForm({ product, isEditing = false }: ProductFormP
       setError('El nombre del producto es obligatorio');
       return;
     }
-    if (!formData.agent_id) {
-      setError('Debes seleccionar un agente para atender este producto');
+    const effectivePrimary =
+      assignedAgents.find((a) => a.is_primary)?.agent_id ||
+      assignedAgents[0]?.agent_id ||
+      formData.agent_id;
+
+    if (assignedAgents.length === 0 && !effectivePrimary) {
+      setError('Debes habilitar al menos un agente para atender este producto');
       return;
     }
 
@@ -318,7 +361,10 @@ export default function ProductForm({ product, isEditing = false }: ProductFormP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          agent_id: effectivePrimary,
           account_id: ctx?.accountId || 'default',
+          assigned_agent_ids: assignedAgents,
+          primary_agent_id: effectivePrimary,
         }),
       });
 
@@ -868,32 +914,75 @@ export default function ProductForm({ product, isEditing = false }: ProductFormP
             />
           </div>
 
-          {/* Agente asignado */}
-          <div>
-            <label className={LABEL}>👤 Agente de IA Asignado para Vender este Producto *</label>
+          {/* Agentes de IA Habilitados (Muchos a Muchos) */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <label className={LABEL}>👤 Agentes de IA Habilitados para este Servicio ({assignedAgents.length}) *</label>
+              <span className="text-[11px] text-ink-soft">
+                Haz clic para habilitar · Marca la estrella ⭐ para elegir el Agente Principal de AdFlow
+              </span>
+            </div>
+
             {agentsLoading ? (
               <div className="flex items-center gap-2 rounded-xl border border-line bg-app p-3 text-xs text-ink-soft">
                 <RotateCw className="h-4 w-4 animate-spin text-primary" />
                 Cargando agentes de la fábrica...
               </div>
             ) : (
-              <select
-                name="agent_id"
-                value={formData.agent_id}
-                onChange={(e) => setFormData((prev) => ({ ...prev, agent_id: e.target.value }))}
-                className={FIELD}
-                required
-              >
-                <option value="">-- Selecciona un agente --</option>
-                {agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name} {agent.role ? `(${agent.role})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {agents.map((agent) => {
+                  const assignment = assignedAgents.find((a) => a.agent_id === agent.id);
+                  const isAssigned = Boolean(assignment);
+                  const isPrimary = Boolean(assignment?.is_primary);
+
+                  return (
+                    <div
+                      key={agent.id}
+                      onClick={() => handleToggleAgent(agent.id)}
+                      className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                        isAssigned
+                          ? 'bg-primary/5 border-primary shadow-sm'
+                          : 'bg-app border-line hover:border-ink-soft/40 opacity-70'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isAssigned}
+                          onChange={() => {}} // handled by parent onClick
+                          className="h-4 w-4 rounded text-primary focus:ring-primary cursor-pointer shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-ink truncate">{agent.name}</p>
+                          <p className="text-[10px] text-ink-soft truncate">{agent.role || 'Agente de Ventas'}</p>
+                        </div>
+                      </div>
+
+                      {isAssigned && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetPrimaryAgent(agent.id);
+                          }}
+                          className={`p-1.5 px-2.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all shrink-0 cursor-pointer ${
+                            isPrimary
+                              ? 'bg-amber-500/20 text-amber-600 border border-amber-500/30 shadow-sm'
+                              : 'text-ink-soft hover:text-amber-500 hover:bg-soft'
+                          }`}
+                          title={isPrimary ? 'Agente Principal (Recibe leads de AdFlow)' : 'Hacer Agente Principal'}
+                        >
+                          <span>⭐</span>
+                          <span className="text-[10px]">{isPrimary ? 'Principal' : 'Elegir'}</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
-            <p className="text-[11px] text-ink-soft mt-1">
-              Este agente responderá en WhatsApp a los leads que lleguen desde tus anuncios de AdFlow.
+            <p className="text-[11px] text-ink-soft">
+              Cualquiera de los agentes habilitados podrá consultar los manuales y vender este producto en sus conversaciones.
             </p>
           </div>
 

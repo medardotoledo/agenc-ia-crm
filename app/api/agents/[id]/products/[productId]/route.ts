@@ -11,7 +11,10 @@ export async function GET(
     const { id, productId } = await params;
 
     const { rows: prodRows } = await pool.query(
-      'SELECT * FROM ai_agent_products WHERE id = $1 AND agent_id = $2 LIMIT 1;',
+      `SELECT p.* FROM ai_agent_products p
+       LEFT JOIN ai_agent_product_assignments asgn ON asgn.product_id = p.id AND asgn.agent_id = $2
+       WHERE p.id = $1 AND (asgn.agent_id = $2 OR p.agent_id = $2)
+       LIMIT 1;`,
       [productId, id]
     );
 
@@ -61,12 +64,12 @@ export async function PUT(
     }
 
     updates.push('updated_at = NOW()');
-    values.push(productId, id);
+    values.push(productId);
 
     const { rows } = await pool.query(`
       UPDATE ai_agent_products
       SET ${updates.join(', ')}
-      WHERE id = $${idx++} AND agent_id = $${idx}
+      WHERE id = $${idx++}
       RETURNING *;
     `, values);
 
@@ -87,7 +90,21 @@ export async function DELETE(
 ) {
   try {
     const { id, productId } = await params;
-    await pool.query('DELETE FROM ai_agent_products WHERE id = $1 AND agent_id = $2;', [productId, id]);
+    const { searchParams } = new URL(req.url);
+    const unassignOnly = searchParams.get('unassign') === 'true';
+
+    if (unassignOnly) {
+      await pool.query('DELETE FROM ai_agent_product_assignments WHERE product_id = $1 AND agent_id = $2;', [productId, id]);
+      // If legacy agent_id matches, reassign or set NULL
+      await pool.query(`
+        UPDATE ai_agent_products 
+        SET agent_id = (SELECT agent_id FROM ai_agent_product_assignments WHERE product_id = $1 LIMIT 1)
+        WHERE id = $1 AND agent_id = $2;
+      `, [productId, id]);
+      return NextResponse.json({ success: true, message: 'Producto desvinculado de este agente' });
+    }
+
+    await pool.query('DELETE FROM ai_agent_products WHERE id = $1;', [productId]);
     return NextResponse.json({ success: true, message: 'Producto eliminado correctamente' });
   } catch (err: any) {
     console.error('[API Product Detail DELETE] Error:', err.message);

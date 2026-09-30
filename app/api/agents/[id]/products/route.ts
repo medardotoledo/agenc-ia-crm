@@ -10,13 +10,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { rows: products } = await pool.query(`
       SELECT 
         p.*,
+        COALESCE(asgn.is_primary, p.agent_id = $1) AS is_primary,
         COUNT(CASE WHEN k.folder = 'material_estudio' THEN 1 END) AS study_files_count,
         COUNT(CASE WHEN k.folder = 'material_compartible' THEN 1 END) AS shareable_files_count,
         (p.knowledge_sheet IS NOT NULL AND LENGTH(p.knowledge_sheet) > 50) AS has_knowledge_sheet
       FROM ai_agent_products p
+      LEFT JOIN ai_agent_product_assignments asgn ON asgn.product_id = p.id AND asgn.agent_id = $1
       LEFT JOIN ai_agent_knowledge k ON k.product_id = p.id
-      WHERE p.agent_id = $1
-      GROUP BY p.id
+      WHERE asgn.agent_id = $1 OR p.agent_id = $1
+      GROUP BY p.id, asgn.is_primary
       ORDER BY p.display_order ASC, p.created_at ASC;
     `, [id]);
 
@@ -31,6 +33,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
     const body = await req.json();
+
+    // 1. Asignar un producto existente del catálogo a este agente
+    if (body.action === 'assign_existing' && body.productId) {
+      await pool.query(`
+        INSERT INTO ai_agent_product_assignments (product_id, agent_id, is_primary)
+        VALUES ($1, $2, false)
+        ON CONFLICT (product_id, agent_id) DO NOTHING;
+      `, [body.productId, id]);
+
+      return NextResponse.json({ success: true, message: 'Producto asignado al agente' });
+    }
+
+    // 2. Crear un nuevo producto desde este agente
     const { name, short_description, target_triggers, price_range } = body;
 
     if (!name || !name.trim()) {
@@ -45,22 +60,41 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'producto';
 
-    const { rows } = await pool.query(`
-      INSERT INTO ai_agent_products (
-        agent_id, name, slug, short_description, target_triggers, price_range
-      )
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *;
-    `, [
-      id,
-      name.trim(),
-      slug,
-      short_description?.trim() || '',
-      target_triggers?.trim() || '',
-      price_range?.trim() || '',
-    ]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    return NextResponse.json({ product: rows[0], success: true }, { status: 201 });
+      const { rows } = await client.query(`
+        INSERT INTO ai_agent_products (
+          agent_id, name, slug, short_description, target_triggers, price_range
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *;
+      `, [
+        id,
+        name.trim(),
+        slug,
+        short_description?.trim() || '',
+        target_triggers?.trim() || '',
+        price_range?.trim() || '',
+      ]);
+
+      const created = rows[0];
+
+      await client.query(`
+        INSERT INTO ai_agent_product_assignments (product_id, agent_id, is_primary)
+        VALUES ($1, $2, true)
+        ON CONFLICT (product_id, agent_id) DO NOTHING;
+      `, [created.id, id]);
+
+      await client.query('COMMIT');
+      return NextResponse.json({ product: created, success: true }, { status: 201 });
+    } catch (err: any) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err: any) {
     console.error('[API Products POST] Error:', err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });

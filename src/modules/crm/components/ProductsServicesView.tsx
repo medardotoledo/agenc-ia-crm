@@ -189,31 +189,40 @@ function ProductCard({ product, onLaunchAd, onEdit, onDelete }: ProductCardProps
         </div>
       )}
 
-      {/* Agente asignado */}
-      {product.agent_name && (
-        <div className="mb-4 flex items-center justify-between rounded-xl bg-app-light p-2.5 border border-line">
-          <div className="flex items-center gap-2">
-            {avatar && (
-              <img
-                src={avatar}
-                alt={product.agent_name}
-                className="h-7 w-7 rounded-full object-cover"
-              />
-            )}
-            <div className="text-xs">
-              <p className="font-semibold text-ink">{product.agent_name}</p>
-              <p className="text-[11px] text-ink-soft">{product.agent_role || 'Agente de Ventas'}</p>
+      {/* Agentes asignados (Muchos a Muchos) */}
+      <div className="mb-4 flex items-center justify-between rounded-xl bg-app-light p-2.5 border border-line">
+        <div className="flex items-center gap-2 min-w-0">
+          {avatar && (
+            <img
+              src={avatar}
+              alt={product.agent_name || 'Agente'}
+              className="h-7 w-7 rounded-full object-cover shrink-0"
+            />
+          )}
+          <div className="text-xs min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-semibold text-ink truncate">
+                {product.agent_name || 'Agente Asignado'}
+              </p>
+              {product.assigned_agents && product.assigned_agents.length > 1 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
+                  +{product.assigned_agents.length - 1} más
+                </span>
+              )}
             </div>
+            <p className="text-[10px] text-ink-soft truncate">
+              {product.agent_role || 'Agente Principal AdFlow'}
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onEdit(product.id)}
-            className="text-[11px] font-bold text-primary hover:underline"
-          >
-            Estudio IA →
-          </button>
         </div>
-      )}
+        <button
+          type="button"
+          onClick={() => onEdit(product.id)}
+          className="text-[11px] font-bold text-primary hover:underline shrink-0 ml-2"
+        >
+          Estudio IA →
+        </button>
+      </div>
 
       {/* Botón destacado AdFlow */}
       <button

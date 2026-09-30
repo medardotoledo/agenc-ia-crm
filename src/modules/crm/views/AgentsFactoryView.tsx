@@ -40,7 +40,10 @@ import {
   Volume2,
   Lock,
   Unlock,
-  FileUp
+  FileUp,
+  Link2,
+  Unlink,
+  Loader2
 } from 'lucide-react';
 import { useAgentsFactoryData } from '../hooks/useAgentsFactoryData';
 
@@ -240,6 +243,12 @@ export default function AgentsFactoryView() {
   const [newProdTriggers, setNewProdTriggers] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
 
+  // Modal Asignar Producto Existente
+  const [assignProductModal, setAssignProductModal] = useState(false);
+  const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [selectedCatalogProductId, setSelectedCatalogProductId] = useState<string>('');
+
   // Estados de síntesis
   const [synthesizingGlobal, setSynthesizingGlobal] = useState(false);
   const [synthesisStep, setSynthesisStep] = useState(0);
@@ -308,6 +317,79 @@ export default function AgentsFactoryView() {
       setError(err.message);
     } finally {
       setActionLoading(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // Abrir modal de asignar producto existente
+  const handleOpenAssignModal = async () => {
+    setAssignProductModal(true);
+    setLoadingCatalog(true);
+    setSelectedCatalogProductId('');
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const data = await res.json();
+        const currentIds = new Set(products.map((p: any) => p.id));
+        const available = (data.products || []).filter((p: any) => !currentIds.has(p.id));
+        setCatalogProducts(available);
+      }
+    } catch (e: any) {
+      console.error('Error cargando catálogo:', e);
+    } finally {
+      setLoadingCatalog(false);
+    }
+  };
+
+  // Asignar producto existente al agente actual
+  const handleAssignExistingProduct = async () => {
+    if (!selectedAgentId || !selectedCatalogProductId) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/agents/${selectedAgentId}/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'assign_existing',
+          productId: selectedCatalogProductId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al asignar producto');
+      setSuccessMsg('Producto asignado exitosamente a este agente.');
+      setAssignProductModal(false);
+      setSelectedCatalogProductId('');
+      await fetchProducts(selectedAgentId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    }
+  };
+
+  // Desvincular producto del agente (conservando el producto en el catálogo)
+  const handleUnassignProduct = async (prodId: string, prodName: string) => {
+    if (!selectedAgentId) return;
+    if (!confirm(`¿Desvincular "${prodName}" de este agente?\n\nEl producto NO se borrará; permanecerá en el catálogo y asignado a otros agentes.`)) return;
+    try {
+      const res = await fetch(`/api/agents/${selectedAgentId}/products/${prodId}?unassign=true`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setSuccessMsg(`Producto desvinculado de este agente.`);
+        if (selectedProductId === prodId) {
+          setSelectedProductId(null);
+          setSelectedProduct(null);
+        }
+        await fetchProducts(selectedAgentId);
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Error al desvincular');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
       setTimeout(() => setSuccessMsg(null), 4000);
     }
   };
@@ -1308,13 +1390,23 @@ export default function AgentsFactoryView() {
                             </p>
                           </div>
 
-                          <button
-                            onClick={() => setCreateProductModal(true)}
-                            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm shrink-0 active:scale-95"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>+ Agregar Producto o Servicio</span>
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={handleOpenAssignModal}
+                              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold transition-all shadow-sm shrink-0 active:scale-95"
+                              title="Asignar un producto existente en el catálogo a este agente"
+                            >
+                              <Link2 className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>+ Asignar Existente</span>
+                            </button>
+                            <button
+                              onClick={() => setCreateProductModal(true)}
+                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm shrink-0 active:scale-95"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>+ Agregar Producto</span>
+                            </button>
+                          </div>
                         </div>
 
                         {/* Menú General del Catálogo */}
@@ -1330,16 +1422,25 @@ export default function AgentsFactoryView() {
                         {products.length === 0 ? (
                           <div className="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-slate-200 space-y-3">
                             <Package className="w-10 h-10 mx-auto text-slate-300" />
-                            <h4 className="text-sm font-bold text-slate-800">No hay productos registrados aún</h4>
+                            <h4 className="text-sm font-bold text-slate-800">No hay productos asignados aún</h4>
                             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                              Agrega tu primer producto o servicio (ej. Invisalign, Implantes, Dron X o PHIX) para cargar sus archivos.
+                              Puedes asignar un producto ya existente en tu catálogo o crear uno nuevo para este agente.
                             </p>
-                            <button
-                              onClick={() => setCreateProductModal(true)}
-                              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm"
-                            >
-                              + Agregar Primer Producto
-                            </button>
+                            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                              <button
+                                onClick={handleOpenAssignModal}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold shadow-sm active:scale-95"
+                              >
+                                <Link2 className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Asignar Producto Existente</span>
+                              </button>
+                              <button
+                                onClick={() => setCreateProductModal(true)}
+                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm active:scale-95"
+                              >
+                                + Crear Nuevo Producto
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-3">
@@ -1394,7 +1495,7 @@ export default function AgentsFactoryView() {
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
                                   <button
                                     onClick={() => handleOpenProduct(prod)}
                                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm active:scale-95"
@@ -1403,9 +1504,16 @@ export default function AgentsFactoryView() {
                                     <ArrowRight className="w-3.5 h-3.5" />
                                   </button>
                                   <button
+                                    onClick={() => handleUnassignProduct(prod.id, prod.name)}
+                                    className="p-2 rounded-xl text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                    title="Desvincular de este agente (se mantiene en catálogo)"
+                                  >
+                                    <Unlink className="w-4 h-4" />
+                                  </button>
+                                  <button
                                     onClick={() => handleDeleteProduct(prod.id)}
                                     className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                    title="Eliminar producto"
+                                    title="Eliminar producto permanentemente"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -1428,13 +1536,31 @@ export default function AgentsFactoryView() {
                             className="flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-indigo-600 transition-colors"
                           >
                             <ArrowLeft className="w-4 h-4" />
-                            <span>← Volver al Catálogo de Productos</span>
+                            <span>← Volver a Productos del Agente</span>
                           </button>
 
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-slate-900 bg-slate-100 px-3 py-1 rounded-xl">
                               {selectedProduct?.name}
                             </span>
+                            <a
+                              href={`/admin/productos/${selectedProduct?.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100 transition-colors"
+                              title="Ver y editar en el catálogo global de productos"
+                            >
+                              <span>Ver en Catálogo</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              onClick={() => selectedProduct && handleUnassignProduct(selectedProduct.id, selectedProduct.name)}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 transition-colors"
+                              title="Desvincular este producto del agente actual"
+                            >
+                              <Unlink className="w-3 h-3" />
+                              <span>Desvincular</span>
+                            </button>
                           </div>
                         </div>
 
@@ -3171,6 +3297,132 @@ export default function AgentsFactoryView() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ASIGNAR PRODUCTO EXISTENTE DEL CATÁLOGO */}
+      {assignProductModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
+                  <Link2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Asignar Producto del Catálogo</h3>
+                  <p className="text-xs text-slate-500">Vincula un producto ya existente para que este agente lo comercialice</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAssignProductModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadingCatalog ? (
+              <div className="py-12 text-center text-slate-400 space-y-3">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-600" />
+                <p className="text-xs font-medium">Cargando catálogo de productos...</p>
+              </div>
+            ) : catalogProducts.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 space-y-3">
+                <Package className="w-10 h-10 mx-auto text-slate-300" />
+                <p className="text-sm font-bold text-slate-700">No hay otros productos disponibles en el catálogo</p>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                  Todos los productos existentes ya están asignados a este agente o tu catálogo aún está vacío.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignProductModal(false);
+                    setCreateProductModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Crear Nuevo Producto</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-600">
+                  Selecciona el producto que deseas activar para este agente. Heredará automáticamente los documentos de estudio, archivos de WhatsApp y la Ficha de Conocimiento ya estructurada:
+                </p>
+
+                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                  {catalogProducts.map((p) => {
+                    const isSelected = selectedCatalogProductId === p.id;
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => setSelectedCatalogProductId(p.id)}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-sm'
+                            : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="catalog_product_selection"
+                              checked={isSelected}
+                              onChange={() => setSelectedCatalogProductId(p.id)}
+                              className="text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="text-sm font-bold text-slate-900">{p.name}</span>
+                          </div>
+                          {p.price_range && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {p.price_range}
+                            </span>
+                          )}
+                        </div>
+                        {p.short_description && (
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-1 pl-5">
+                            {p.short_description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500 pl-5">
+                          <span>🔒 {p.study_files_count || 0} Docs Estudio</span>
+                          <span>•</span>
+                          <span>📱 {p.shareable_files_count || 0} WhatsApp</span>
+                          {p.has_knowledge_sheet && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-600 font-bold">✓ Ficha Lista</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setAssignProductModal(false)}
+                    className="px-4 py-2 rounded-xl text-slate-500 hover:text-slate-800 text-xs font-semibold"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAssignExistingProduct}
+                    disabled={actionLoading || !selectedCatalogProductId}
+                    className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 active:scale-95 disabled:opacity-50"
+                  >
+                    {actionLoading ? 'Asignando...' : 'Asignar a este Agente'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
